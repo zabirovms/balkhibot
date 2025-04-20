@@ -21,7 +21,6 @@ def get_config():
         'BOT_TOKEN': os.getenv('BOT_TOKEN')
     }
     
-    # Validate configuration
     if not config['BOT_TOKEN']:
         logger.error("Bot token not configured!")
         raise ValueError("You must set BOT_TOKEN environment variable")
@@ -119,14 +118,6 @@ class DatabaseManager:
             self.conn.close()
             logger.info("Database connection closed.")
 
-# Initialize database connection
-try:
-    db = DatabaseManager()
-except Exception as e:
-    logger.error(f"Failed to initialize database: {e}")
-    # Handle the error appropriately for your application
-    raise
-
 def highlight_text(text, search_term):
     if not search_term:
         return text
@@ -165,7 +156,6 @@ async def send_message_safe(update_or_query, text, **kwargs):
             for part in parts:
                 await send_message_safe(update_or_query, part, **kwargs)
 
-# Start Command - Completely redesigned
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         ["Маснавии Маънавӣ"],
@@ -371,6 +361,7 @@ def main():
         config = get_config()
         
         # Initialize database connection
+        global db
         db = DatabaseManager(config['DATABASE_URL'])
         
         # Create application
@@ -390,7 +381,7 @@ def main():
     except Exception as e:
         logger.error(f"Application error: {e}")
     finally:
-        if 'db' in locals() and db.conn:
+        if 'db' in globals() and db.conn:
             db.close()
             logger.info("Database connection closed.")
 
