@@ -6,6 +6,10 @@ import psycopg2
 from psycopg2.extras import DictCursor
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Logging Setup
 logging.basicConfig(
