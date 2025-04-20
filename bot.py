@@ -14,15 +14,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# PostgreSQL Connection Settings
-DB_CONFIG = {
-    'dbname': os.getenv('DB_NAME'),
-    'user': os.getenv('DB_USER'),
-    'password': os.getenv('DB_PASSWORD'),
-    'host': os.getenv('DB_HOST'),
-    'port': os.getenv('DB_PORT')
-}
-
+# Get Heroku Postgres URL from environment variables
+DATABASE_URL = os.getenv('DATABASE_URL')
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # Database Manager Class
@@ -36,7 +29,8 @@ class DatabaseManager:
     def connect_with_retry(self):
         for attempt in range(self.max_retries):
             try:
-                self.conn = psycopg2.connect(**DB_CONFIG)
+                # Parse the DATABASE_URL into individual components
+                self.conn = psycopg2.connect(DATABASE_URL, sslmode='require')
                 logger.info("✅ Connected to PostgreSQL database.")
                 return
             except psycopg2.OperationalError as e:
@@ -111,7 +105,13 @@ class DatabaseManager:
             self.conn.close()
             logger.info("Database connection closed.")
 
-db = DatabaseManager()
+# Initialize database connection
+try:
+    db = DatabaseManager()
+except Exception as e:
+    logger.error(f"Failed to initialize database: {e}")
+    # Handle the error appropriately for your application
+    raise
 
 def highlight_text(text, search_term):
     if not search_term:
@@ -352,12 +352,24 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await send_message_safe(update, message_text, parse_mode='HTML')
 
 def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("search", search))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    application.add_handler(CallbackQueryHandler(button_callback))
-    application.run_polling()
+    try:
+        application = Application.builder().token(BOT_TOKEN).build()
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("search", search))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        application.add_handler(CallbackQueryHandler(button_callback))
+        
+        # Handle database connection errors at startup
+        if db.conn is None:
+            logger.error("No database connection available")
+            return
+        
+        application.run_polling()
+    except Exception as e:
+        logger.error(f"Application error: {e}")
+    finally:
+        if db.conn:
+            db.close()
 
 if __name__ == '__main__':
     main()
