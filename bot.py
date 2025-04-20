@@ -14,14 +14,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get Heroku Postgres URL from environment variables
-DATABASE_URL = os.getenv('DATABASE_URL')
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+# Configuration
+def get_config():
+    config = {
+        'DATABASE_URL': os.getenv('DATABASE_URL'),
+        'BOT_TOKEN': os.getenv('BOT_TOKEN')
+    }
+    
+    # Validate configuration
+    if not config['BOT_TOKEN']:
+        logger.error("Bot token not configured!")
+        raise ValueError("You must set BOT_TOKEN environment variable")
+    
+    if not config['DATABASE_URL']:
+        logger.error("Database URL not configured!")
+        raise ValueError("You must set DATABASE_URL environment variable")
+    
+    return config
 
 # Database Manager Class
 class DatabaseManager:
-    def __init__(self, max_retries=3, retry_delay=2):
+    def __init__(self, database_url, max_retries=3, retry_delay=2):
         self.conn = None
+        self.database_url = database_url
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.connect_with_retry()
@@ -29,8 +44,7 @@ class DatabaseManager:
     def connect_with_retry(self):
         for attempt in range(self.max_retries):
             try:
-                # Parse the DATABASE_URL into individual components
-                self.conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+                self.conn = psycopg2.connect(self.database_url, sslmode='require')
                 logger.info("✅ Connected to PostgreSQL database.")
                 return
             except psycopg2.OperationalError as e:
@@ -353,23 +367,32 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     try:
-        application = Application.builder().token(BOT_TOKEN).build()
+        # Load configuration
+        config = get_config()
+        
+        # Initialize database connection
+        db = DatabaseManager(config['DATABASE_URL'])
+        
+        # Create application
+        application = Application.builder().token(config['BOT_TOKEN']).build()
+        
+        # Add handlers
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("search", search))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         application.add_handler(CallbackQueryHandler(button_callback))
         
-        # Handle database connection errors at startup
-        if db.conn is None:
-            logger.error("No database connection available")
-            return
-        
+        logger.info("Starting bot...")
         application.run_polling()
+        
+    except ValueError as e:
+        logger.error(f"Configuration error: {e}")
     except Exception as e:
         logger.error(f"Application error: {e}")
     finally:
-        if db.conn:
+        if 'db' in locals() and db.conn:
             db.close()
+            logger.info("Database connection closed.")
 
 if __name__ == '__main__':
     main()
