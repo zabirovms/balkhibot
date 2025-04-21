@@ -388,7 +388,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         description = "Макотиб:\nНавъ: Номаҳо\nШарҳ: Маҷмӯаи номаҳои шахсии Балхӣ ба дӯстону муридон.\n\nАйни ҳол дастрас нест"
         await send_message_safe(update, description, reply_markup=ReplyKeyboardMarkup([["Ба аввал"]], resize_keyboard=True))
 
-     elif text == "Маълумот дар бораи Балхӣ":
+    elif text == "Маълумот дар бораи Балхӣ":
         await balkhi_info(update, context)
 
     elif text == "Ҷустуҷӯ":
