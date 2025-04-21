@@ -253,7 +253,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         ["Маснавии Маънавӣ"],
         ["Девони Шамс"],
-        ["Фиҳӣ Мо Фиҳ", "Маҷолиҷи Сабъа"],
+        ["Фиҳӣ Мо Фиҳ", "Маҷолиси Сабъа"],
         ["Макотиб"],
         ["Ҷустуҷӯ", "Маълумот дар бораи Балхӣ"]
     ]
@@ -380,7 +380,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         description = "Фиҳӣ Мо Фиҳ:\nНавъ: Наср\nШарҳ: Маҷмӯаи суҳбатҳо ва маърифатҳои ирфонӣ.\n\nАйни ҳол дастрас нест"
         await send_message_safe(update, description, reply_markup=ReplyKeyboardMarkup([["Ба аввал"]], resize_keyboard=True))
 
-    elif text == "Маъолиҷи Сабъа":
+    elif text == "Маъолиcи Сабъа":
         description = "Маъолиҷи Сабъа:\nНавъ: Наср\nШарҳ: Ҳафт маҷлиси маърифатӣ ва иршодӣ аз Балхӣ.\n\nАйни ҳол дастрас нест"
         await send_message_safe(update, description, reply_markup=ReplyKeyboardMarkup([["Ба аввал"]], resize_keyboard=True))
 
@@ -388,9 +388,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         description = "Макотиб:\nНавъ: Номаҳо\nШарҳ: Маҷмӯаи номаҳои шахсии Балхӣ ба дӯстону муридон.\n\nАйни ҳол дастрас нест"
         await send_message_safe(update, description, reply_markup=ReplyKeyboardMarkup([["Ба аввал"]], resize_keyboard=True))
 
-    elif text == "Саргузашт":
-        description = "Саргузашти Ҷалолуддини Балхӣ:\n\nАйни ҳол дастрас нест"
-        await send_message_safe(update, description, reply_markup=ReplyKeyboardMarkup([["Ба аввал"]], resize_keyboard=True))
+     elif text == "Маълумот дар бораи Балхӣ":
+        await balkhi_info(update, context)
 
     elif text == "Ҷустуҷӯ":
         await send_message_safe(
@@ -421,6 +420,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("poem_"):
         _, poem_id, part = data.split("_")
         await send_poem(query, int(poem_id), show_full=True, part=int(part))
+    elif data == "masnavi_info":
+        await masnavi_info(query, context)
+    elif data == "divan_info":
+        await divan_info(query, context)
+    elif data == "back_to_info":
+        await balkhi_info(query, context)
+    elif data == "back_to_start":
+        await start(query, context)
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_term = ' '.join(context.args).strip()
