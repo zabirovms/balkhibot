@@ -154,6 +154,22 @@ class DatabaseManager:
         result = self.execute_query(query, fetch=True)
         return result[0] if result else None
 
+    def add_highlighted_verse(self, poem_unique_id, verse_text):
+        query = """
+        INSERT INTO highlighted_verses (poem_unique_id, verse_text)
+        VALUES (%s, %s)
+        """
+        self.execute_query(query, (poem_unique_id, verse_text))
+
+    def is_highlight_exists(self, poem_unique_id, verse_text):
+        query = """
+        SELECT 1 FROM highlighted_verses 
+        WHERE poem_unique_id = %s AND verse_text = %s
+        LIMIT 1
+        """
+        return bool(self.execute_query(query, (poem_unique_id, verse_text), fetch=True))
+
+
     def close(self):
         if self.conn:
             self.conn.close()
@@ -592,6 +608,33 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in button_callback: {e}")
         await query.answer("Хатоги дар коркарди фармонат рух дод. Лутфан аз нав кӯшиш кунед.")
 
+ADMIN_USER_IDS = [5254483564]  # Replace with your actual Telegram user ID
+
+async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_USER_IDS:
+        await update.message.reply_text("⛔️ Шумо иҷозати иҷрои ин фармонро надоред.")
+        return
+
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("Истифода: /highlight <unique_id> <матни мисра>")
+        return
+
+    try:
+        poem_unique_id = int(context.args[0])
+        verse_text = ' '.join(context.args[1:])
+
+        if db.is_highlight_exists(poem_unique_id, verse_text):
+            await update.message.reply_text("⚠️ Ин мисра аллакай дар <i>highlighted_verses</i> мавҷуд аст.", parse_mode='HTML')
+            return
+
+        db.add_highlighted_verse(poem_unique_id, verse_text)
+        await update.message.reply_text("✅ Мисра ба <i>highlighted_verses</i> илова шуд.", parse_mode='HTML')
+    except Exception as e:
+        logger.error(f"Error adding highlighted verse: {e}")
+        await update.message.reply_text("❌ Хатогӣ дар иловаи мисра.")
+
+
 def main():
     # Check if required environment variables are set
     if not BOT_TOKEN or not DATABASE_URL:
@@ -606,6 +649,8 @@ def main():
     application.add_handler(CommandHandler("daily", daily_verse))
     application.add_handler(CommandHandler("verse", daily_verse))
     application.add_handler(CommandHandler("info", balkhi_info))
+    application.add_handler(CommandHandler("highlight", highlight_verse))
+
     
     # Message handlers
     application.add_handler(MessageHandler(
