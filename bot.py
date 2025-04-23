@@ -627,16 +627,20 @@ async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         poem_unique_id = int(context.args[0])
         verse_text = ' '.join(context.args[1:])
-
+        
+        # Format verse with paragraphs (line breaks)
+        verse_text = '\n'.join(context.args[1:])
+        
         if db.is_highlight_exists(poem_unique_id, verse_text):
             await update.message.reply_text("⚠️ Ин мисра аллакай дар <i>highlighted_verses</i> мавҷуд аст.", parse_mode='HTML')
             return
 
         db.add_highlighted_verse(poem_unique_id, verse_text)
-        await update.message.reply_text("✅ Мисра ба <i>highlighted_verses</i> илова шуд.", parse_mode='HTML')
+        await update.message.reply_text(f"✅ Мисра ба <i>highlighted_verses</i> илова шуд:\n\n<pre>{verse_text}</pre>", parse_mode='HTML')
     except Exception as e:
         logger.error(f"Error adding highlighted verse: {e}")
         await update.message.reply_text("❌ Хатогӣ дар иловаи мисра.")
+
 
 async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
