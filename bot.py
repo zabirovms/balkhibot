@@ -224,7 +224,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ["Маснавии Маънавӣ"],
         ["Девони Шамс"],
         ["Ҷустуҷӯ", "Маълумот дар бораи Балхӣ"],
-        ["Ибораи рӯз"]
+        ["Мисраи рӯз"]
     ]
     await send_message_safe(
         update,
@@ -397,7 +397,7 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
         back_button = []
         if hasattr(update_or_query, 'data') and 'full_poem_' in update_or_query.data:
             back_button.append(InlineKeyboardButton(
-                "↩️ Ба ибораи рӯз",
+                "↩️ Ба мисраи рӯз",
                 callback_data=f"back_to_daily_{poem_id}"
             ))
         else:
@@ -447,11 +447,11 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
 async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     verse = db.get_daily_verse()
     if not verse:
-        await send_message_safe(update, "⚠️ Ибораи рӯз ёфт нашуд.")
+        await send_message_safe(update, "⚠️ Мисраи рӯз ёфт нашуд.")
         return
     
     message_text = (
-        f"🌟 <b>Ибораи рӯз</b> 🌟\n\n"
+        f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
         f"📖 <b>{verse['book_title']}</b>\n"
         f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
         f"<i>{verse['verse_text']}</i>"
@@ -502,7 +502,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await masnavi_info(update, context)
     elif text == "Маълумот дар бораи Балхӣ":
         await balkhi_info(update, context)
-    elif text == "Ибораи рӯз":
+    elif text == "Мисраи рӯз":
         await daily_verse(update, context)
     elif text == "Ҷустуҷӯ":
         await send_message_safe(
@@ -562,7 +562,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if verse:
                 message_text = (
-                    f"🌟 <b>Ибораи рӯз</b> 🌟\n\n"
+                    f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
                     f"📖 <b>{verse[0]['book_title']}</b>\n"
                     f"📜 <b>{verse[0]['volume_number']} - Бахши {verse[0]['poem_id']}</b>\n\n"
                     f"<i>{verse[0]['verse_text']}</i>"
