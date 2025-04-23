@@ -7,7 +7,7 @@ import random
 from datetime import date
 from psycopg2 import sql
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, RateLimiter
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from psycopg2.extras import DictCursor
 
 # Logging Setup
@@ -694,7 +694,7 @@ def main():
     
     # Command handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("search", search), RateLimiter(2, 60))  # Add RateLimiter here
+    application.add_handler(CommandHandler("search", search))
     application.add_handler(CommandHandler("daily", daily_verse))
     application.add_handler(CommandHandler("verse", daily_verse))
     application.add_handler(CommandHandler("info", balkhi_info))
