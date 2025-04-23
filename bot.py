@@ -478,6 +478,32 @@ async def get_daily_verse(db):
     db.execute_query("INSERT INTO daily_verse_log (verse_id, shown_date) VALUES (%s, %s)", (verse[0], today))
     return verse
 
+async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db = get_db_connection()  # Ensure you have a function to connect to the database
+    verse = await get_daily_verse(db)
+    
+    if not verse:
+        await update.message.reply_text("⚠️ Мисраи рӯз ёфт нашуд.")
+        return
+    
+    message_text = (
+        f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
+        f"📖 <b>{verse['book_title']}</b>\n"
+        f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
+        f"<i>{verse['verse_text']}</i>"
+    )
+
+    # Send the message with the verse
+    keyboard = [[
+        InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse['unique_id']}")
+    ]]
+    
+    await update.message.reply_text(
+        message_text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_term = ' '.join(context.args).strip()
     if not search_term:
