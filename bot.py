@@ -169,6 +169,10 @@ class DatabaseManager:
         """
         return bool(self.execute_query(query, (poem_unique_id, verse_text), fetch=True))
 
+    def delete_highlighted_verse(self, highlight_id):
+    query = "DELETE FROM highlighted_verses WHERE id = %s"
+    self.execute_query(query, (highlight_id,))
+
 
     def close(self):
         if self.conn:
@@ -634,6 +638,24 @@ async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error adding highlighted verse: {e}")
         await update.message.reply_text("❌ Хатогӣ дар иловаи мисра.")
 
+async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_USER_IDS:
+        await update.message.reply_text("⛔️ Шумо иҷозати иҷрои ин фармонро надоред.")
+        return
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Истифода: /delete_highlight <highlight_id>")
+        return
+
+    try:
+        highlight_id = int(context.args[0])
+        db.delete_highlighted_verse(highlight_id)
+        await update.message.reply_text(f"✅ Мисраи бо ID {highlight_id} ҳазф шуд.")
+    except Exception as e:
+        logger.error(f"Error deleting highlighted verse: {e}")
+        await update.message.reply_text("❌ Хатогӣ дар ҳазфи мисра.")
+
 
 def main():
     # Check if required environment variables are set
@@ -650,6 +672,7 @@ def main():
     application.add_handler(CommandHandler("verse", daily_verse))
     application.add_handler(CommandHandler("info", balkhi_info))
     application.add_handler(CommandHandler("highlight", highlight_verse))
+    application.add_handler(CommandHandler("delete_highlight", delete_highlight))
 
     
     # Message handlers
