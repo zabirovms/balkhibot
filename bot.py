@@ -253,16 +253,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def balkhi_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    info_text = """
-<b>Мавлоно Ҷалолуддини Балхии Румӣ (1207-1273)</b>
-
-Мавлоно яке аз бузургтарин шоиру орифони форсу тоҷик мебошад. Осори ӯ аз ҷумла Маснавии маънавӣ ва Девони Шамс то имрӯз дар ҷаҳон машҳуранд.
-"""
+    # Short intro message
+    info_text = "📖 <b>Маълумот дар бораи Мавлоно Ҷалолуддини Балхӣ</b>\n\nБарои хондани тарҷумаи ҳол ва осораш, тугмаи зерро пахш кунед:"
+    
+    # Keyboard with Telegraph button
     keyboard = [
+        [InlineKeyboardButton("📜 Маълумот дар Telegra.ph", url="https://telegra.ph/Mavlonoi-Balh-04-23")],  # Replace with your link
         [InlineKeyboardButton("Маснавии Маънавӣ", callback_data="masnavi_info")],
         [InlineKeyboardButton("Девони Шамс", callback_data="divan_info")],
-        [InlineKeyboardButton("Ба аввал", callback_data="back_to_start")]
+        [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
     ]
+    
     await send_message_safe(
         update,
         info_text,
