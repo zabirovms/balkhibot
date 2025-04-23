@@ -175,6 +175,18 @@ class DatabaseManager:
         query = "DELETE FROM highlighted_verses WHERE verse_id = %s"
         self.execute_query(query, (highlight_id,))
 
+    def get_daily_verse(self):
+        today = date.today()
+        query = """
+        SELECT p.*, hv.verse_text
+        FROM highlighted_verses hv
+        JOIN poems p ON p.unique_id = hv.poem_unique_id
+        ORDER BY RANDOM()
+        LIMIT 1
+        """
+        result = self.execute_query(query, fetch=True)
+        return result[0] if result else None
+
 
     def close(self):
         if self.conn:
@@ -450,37 +462,8 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
             reply_markup=reply_markup
         )
 
-async def get_daily_verse(db):
-    today = date.today()
-
-    # Check if verse is already shown today
-    query = "SELECT verse_id FROM daily_verse_log WHERE shown_date = %s"
-    result = db.fetch_one(query, (today,))
-    if result:
-        verse_id = result[0]
-        return db.fetch_one("SELECT * FROM highlighted_verses WHERE verse_id = %s", (verse_id,))
-
-    # Get all used verse_ids
-    used_ids = db.fetch_all("SELECT verse_id FROM daily_verse_log")
-    used_ids = {row[0] for row in used_ids}
-
-    # Get all available verse_ids
-    all_verses = db.fetch_all("SELECT * FROM highlighted_verses")
-    unused_verses = [v for v in all_verses if v[0] not in used_ids]  # assuming v[0] is verse_id
-
-    # Choose one
-    if unused_verses:
-        verse = random.choice(unused_verses)
-    else:
-        verse = random.choice(all_verses)
-
-    # Log today's verse
-    db.execute_query("INSERT INTO daily_verse_log (verse_id, shown_date) VALUES (%s, %s)", (verse[0], today))
-    return verse
-
 async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    db = get_db_connection()  # Ensure you have a function to connect to the database
-    verse = await get_daily_verse(db)
+    verse = db.get_daily_verse()
     
     if not verse:
         await update.message.reply_text("⚠️ Мисраи рӯз ёфт нашуд.")
@@ -493,7 +476,6 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"<i>{verse['verse_text']}</i>"
     )
 
-    # Send the message with the verse
     keyboard = [[
         InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse['unique_id']}")
     ]]
