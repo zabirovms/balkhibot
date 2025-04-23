@@ -170,7 +170,7 @@ class DatabaseManager:
         return bool(self.execute_query(query, (poem_unique_id, verse_text), fetch=True))
 
     def delete_highlighted_verse(self, highlight_id):
-        query = "DELETE FROM highlighted_verses WHERE id = %s"
+        query = "DELETE FROM highlighted_verses WHERE verse_id = %s"
         self.execute_query(query, (highlight_id,))
 
 
