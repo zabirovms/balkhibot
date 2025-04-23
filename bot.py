@@ -3,6 +3,8 @@ import logging
 import psycopg2
 import time
 import re
+import random
+from datetime import date
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from psycopg2.extras import DictCursor
@@ -448,29 +450,33 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
             reply_markup=reply_markup
         )
 
-async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    verse = db.get_daily_verse()
-    if not verse:
-        await send_message_safe(update, "⚠️ Мисраи рӯз ёфт нашуд.")
-        return
-    
-    message_text = (
-        f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
-        f"📖 <b>{verse['book_title']}</b>\n"
-        f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
-        f"<i>{verse['verse_text']}</i>"
-    )
-    
-    keyboard = [[
-        InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse['unique_id']}")
-    ]]
-    
-    await send_message_safe(
-        update,
-        message_text,
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+async def get_daily_verse(db):
+    today = date.today()
+
+    # Check if verse is already shown today
+    query = "SELECT verse_id FROM daily_verse_log WHERE shown_date = %s"
+    result = db.fetch_one(query, (today,))
+    if result:
+        verse_id = result[0]
+        return db.fetch_one("SELECT * FROM highlighted_verses WHERE verse_id = %s", (verse_id,))
+
+    # Get all used verse_ids
+    used_ids = db.fetch_all("SELECT verse_id FROM daily_verse_log")
+    used_ids = {row[0] for row in used_ids}
+
+    # Get all available verse_ids
+    all_verses = db.fetch_all("SELECT * FROM highlighted_verses")
+    unused_verses = [v for v in all_verses if v[0] not in used_ids]  # assuming v[0] is verse_id
+
+    # Choose one
+    if unused_verses:
+        verse = random.choice(unused_verses)
+    else:
+        verse = random.choice(all_verses)
+
+    # Log today's verse
+    db.execute_query("INSERT INTO daily_verse_log (verse_id, shown_date) VALUES (%s, %s)", (verse[0], today))
+    return verse
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_term = ' '.join(context.args).strip()
