@@ -5,8 +5,9 @@ import time
 import re
 import random
 from datetime import date
+from psycopg2 import sql
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, RateLimiter
 from psycopg2.extras import DictCursor
 
 # Logging Setup
@@ -462,6 +463,15 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
             reply_markup=reply_markup
         )
 
+async def divan_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_message_safe(
+        update,
+        "Девони Шамс - ғазалиёт ва ашъори лирикии Мавлоно.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("↩️ Бозгашт", callback_data="back_to_info")]
+        ])
+    )
+
 async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     verse = db.get_daily_verse()
     
@@ -626,7 +636,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in button_callback: {e}")
         await query.answer("Хатоги дар коркарди фармонат рух дод. Лутфан аз нав кӯшиш кунед.")
 
-ADMIN_USER_IDS = [5254483564]  # Replace with your actual Telegram user ID
+ADMIN_USER_IDS = list(map(int, os.getenv('ADMIN_IDS', '').split(',')))
 
 async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -684,7 +694,7 @@ def main():
     
     # Command handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("search", search))
+    application.add_handler(CommandHandler("search", search), RateLimiter(2, 60))  # Add RateLimiter here
     application.add_handler(CommandHandler("daily", daily_verse))
     application.add_handler(CommandHandler("verse", daily_verse))
     application.add_handler(CommandHandler("info", balkhi_info))
