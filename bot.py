@@ -627,9 +627,8 @@ async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         poem_unique_id = int(context.args[0])
         verse_text = ' '.join(context.args[1:])
-        
-        # Format verse with paragraphs (line breaks)
-        verse_text = '\n'.join(context.args[1:])
+        verse_text = verse_text.replace('||', '\n')  # convert line markers to actual line breaks
+
         
         if db.is_highlight_exists(poem_unique_id, verse_text):
             await update.message.reply_text("⚠️ Ин мисра аллакай дар <i>highlighted_verses</i> мавҷуд аст.", parse_mode='HTML')
