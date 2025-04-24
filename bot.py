@@ -285,7 +285,7 @@ async def masnavi_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 callback_data="unavailable_daftar"
             )])
 
-    buttons.append([InlineKeyboardButton("Ба аввал", callback_data="back_to_start")])
+    buttons.append([InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")])
 
     if update.callback_query:
         query = update.callback_query
@@ -348,11 +348,10 @@ async def show_poems_page(update: Update, context: ContextTypes.DEFAULT_TYPE, da
         callback_data="back_to_daftars"
     )])
 
-    # Removed the redundant "Ба аввал" here
-    # buttons.append([InlineKeyboardButton(
-    #     "🏠 Ба аввал",
-    #     callback_data="back_to_start"
-    # )])
+    buttons.append([InlineKeyboardButton(
+        "🏠 Ба аввал",
+        callback_data="back_to_start"
+    )])
 
     message_text = (
         f"📖 <b>{daftar_name}</b>\n"
