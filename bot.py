@@ -3,12 +3,10 @@ import logging
 import psycopg2
 import time
 import re
-import random
-from datetime import date
-from psycopg2 import sql
-from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from psycopg2.extras import DictCursor
+from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ParseMode
 
 # Logging Setup
 logging.basicConfig(
@@ -33,38 +31,22 @@ class DatabaseManager:
     def _ensure_database_integrity(self):
         try:
             if not self.execute_query("""
-                SELECT column_name FROM information_schema.columns 
+                SELECT column_name FROM information_schema.columns
                 WHERE table_name = 'poems' AND column_name = 'unique_id'
             """, fetch=True):
-                self.execute_query("ALTER TABLE poems ADD COLUMN unique_id SERIAL PRIMARY KEY")
+                self.execute_query("ALTER TABLE poems ADD COLUMN IF NOT EXISTS unique_id SERIAL PRIMARY KEY")
 
             if not self.execute_query("""
-                SELECT table_name FROM information_schema.tables 
+                SELECT table_name FROM information_schema.tables
                 WHERE table_name = 'highlighted_verses'
             """, fetch=True):
                 self.execute_query("""
-                    CREATE TABLE highlighted_verses (
+                    CREATE TABLE IF NOT EXISTS highlighted_verses (
                         id SERIAL PRIMARY KEY,
                         poem_unique_id INTEGER NOT NULL REFERENCES poems(unique_id),
                         verse_text TEXT NOT NULL
                     )
                 """)
-                if self.execute_query("SELECT 1 FROM poems LIMIT 1", fetch=True):
-                    self.execute_query("""
-                        INSERT INTO highlighted_verses (poem_unique_id, verse_text)
-                        SELECT p.unique_id, p.poem_text FROM poems p
-                        WHERE EXISTS (
-                            SELECT 1 FROM poems p2 
-                            WHERE p2.book_title = p.book_title
-                            AND p2.volume_number = p.volume_number
-                            AND p2.poem_id = p.poem_id
-                            LIMIT 1
-                        )
-                    """)
-            self.execute_query("""
-                CREATE INDEX IF NOT EXISTS idx_poems_unique_id ON poems(unique_id);
-                CREATE INDEX IF NOT EXISTS idx_hv_poem_unique_id ON highlighted_verses(poem_unique_id);
-            """)
         except Exception as e:
             logger.error(f"DB Integrity Error: {e}")
             raise
@@ -170,7 +152,15 @@ async def send_message_safe(update_or_query, text, **kwargs):
     except Exception as e:
         logger.error(f"Error sending message: {e}")
         for part in split_long(text):
-            await send_message_safe(update_or_query, part, **kwargs)
+            try:
+                if isinstance(update_or_query, Update):
+                    await update_or_query.message.reply_text(part, **kwargs)
+                elif hasattr(update_or_query, 'edit_message_text'):
+                    await update_or_query.edit_message_text(part, **kwargs)
+                elif hasattr(update_or_query, 'reply_text'):
+                    await update_or_query.reply_text(part, **kwargs)
+            except Exception as sub_e:
+                logger.error(f"Error sending message part: {sub_e}")
 
 # ============================ HANDLERS ============================
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,18 +184,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             poem_id = int(data.split("_")[3])
             verse = db.execute_query(
                 """
-                SELECT p.*, hv.verse_text FROM highlighted_verses hv
-                JOIN poems p ON p.unique_id = hv.poem_unique_id
-                WHERE p.poem_id = %s
+                    SELECT p.*, hv.verse_text FROM highlighted_verses hv
+                    JOIN poems p ON p.unique_id = hv.poem_unique_id
+                    WHERE p.poem_id = %s
                 """,
                 (poem_id,), fetch=True
             )
             if verse:
                 message_text = (
                     f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
-                    f"📖 <b>{verse['book_title']}</b>\n"
-                    f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
-                    f"<i>{verse['verse_text']}</i>"
+                    f"📖 <b>{verse[0]['book_title']}</b>\n"
+                    f"📜 <b>{verse[0]['volume_number']} - Бахши {verse[0]['poem_id']}</b>\n\n"
+                    f"<i>{verse[0]['verse_text']}</i>"
                 )
 
                 keyboard = [[
@@ -239,9 +229,7 @@ async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ Ин мисра аллакай мавҷуд аст.")
             return
         db.add_highlighted_verse(poem_unique_id, verse_text)
-        await update.message.reply_text(f"✅ Мисра илова шуд:
-
-<pre>{verse_text}</pre>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ Мисра илова шуд:\n\n<pre>{verse_text}</pre>", parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Error adding highlight: {e}")
         await update.message.reply_text("❌ Хатогӣ дар иловаи мисра.")
@@ -268,13 +256,9 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
         await send_message_safe(update_or_query, "⚠️ Шеъри дархостшуда ёфт нашуд.")
         return
     intro = (
-        f"📖 <b>{poem['book_title']}</b>
-"
-        f"📜 <b>{poem['volume_number']} - Бахши {poem['poem_id']}</b>
-"
-        f"🔹 {poem['section_title']}
-
-"
+        f"📖 <b>{poem['book_title']}</b>\n"
+        f"📜 <b>{poem['volume_number']} - Бахши {poem['poem_id']}</b>\n"
+        f"🔹 {poem['section_title']}\n\n"
     )
     poem_text = poem['poem_text']
     if search_term:
@@ -299,13 +283,10 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        preview_text = text_parts[0] + "
-
-... (шеър тӯлонӣ аст)"
+        preview_text = text_parts[0] + "\n\n... (шеър тӯлонӣ аст)"
         message_text = f"{intro}<pre>{preview_text}</pre>"
         keyboard = [[InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"poem_{poem_id}_0")]]
         await send_message_safe(update_or_query, message_text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
-from telegram.constants import ParseMode
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -325,7 +306,7 @@ async def handle_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYP
     await send_message_safe(
         update,
         "Лутфан аз тугмаҳои меню истифода баред ё бо фармони /search ҷустуҷӯ кунед.",
-        reply_markup=ReplyKeyboardMarkup([["🏠 Ба аввал"]], resize_keyboard=True)
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]])
     )
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -341,13 +322,9 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         highlighted = highlight_text(poem['poem_text'], search_term)
         text_parts = split_long(highlighted)
         intro = (
-            f"📖 <b>{poem['book_title']}</b>
-"
-            f"📜 <b>{poem['volume_number']} - Бахши {poem['poem_id']}</b>
-"
-            f"🔹 {poem['section_title']}
-
-"
+            f"📖 <b>{poem['book_title']}</b>\n"
+            f"📜 <b>{poem['volume_number']} - Бахши {poem['poem_id']}</b>\n"
+            f"🔹 {poem['section_title']}\n\n"
         )
         for part in text_parts:
             message_text = f"{intro}<pre>{part}</pre>"
@@ -359,28 +336,26 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_message_safe(update, "⚠️ Мисраи рӯз ёфт нашуд.")
         return
     message_text = (
-                    f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
-                    f"📖 <b>{verse['book_title']}</b>\n"
-                    f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
-                    f"<i>{verse['verse_text']}</i>"
-                )
+        f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
+        f"📖 <b>{verse['book_title']}</b>\n"
+        f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
+        f"<i>{verse['verse_text']}</i>"
+    )
     keyboard = [[
         InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse['unique_id']}")
     ]]
     await send_message_safe(update, message_text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
-# Command and callback handlers will be reinserted next (e.g. /start, /search, button_callback, etc.)
 
-# ============================ MAIN ============================
 def main():
     if not BOT_TOKEN or not DATABASE_URL:
         logger.error("Environment variables not set!")
         return
     app = Application.builder().token(BOT_TOKEN).build()
-        app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("search", search))
     app.add_handler(CommandHandler("daily", daily_verse))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invalid_input))
-        app.add_handler(CommandHandler("highlight", highlight_verse))
+    app.add_handler(CommandHandler("highlight", highlight_verse))
     app.add_handler(CommandHandler("delete_highlight", delete_highlight))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.run_polling()
