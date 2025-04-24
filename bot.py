@@ -589,13 +589,17 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"<i>{verse['verse_text']}</i>"
         )
 
-        keyboard = [[
+        keyboard = [
+            [
                 InlineKeyboardButton("📖 Шеъри пурра", 
-                    callback_data=f"full_{verse['poem_id']}_0_{verse['volume_number']}")  # Include daftar
-            ]]
-            InlineKeyboardButton("🔄 Мисраи нав", callback_data="daily_verse"),
-            InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")
-        ]]
+                    callback_data=f"full_{verse['poem_id']}_0_{verse['volume_number']}")
+            ],
+            [
+                InlineKeyboardButton("🔄 Мисраи нав", callback_data="daily_verse"),
+                InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")
+            ]
+        ]
+        
 
         if isinstance(update, CallbackQuery):
             await update.edit_message_text(
