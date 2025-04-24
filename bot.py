@@ -420,8 +420,8 @@ async def show_poems_page(
             buttons.append(nav_buttons)
 
         buttons.append([InlineKeyboardButton(
-            "↩️ Ба дафтарҳо",
-            callback_data="back_to_daftars"
+            f"Бахши {poem['poem_id']}",
+            callback_data=f"poem_{poem['poem_id']}_0_{daftar_name}"  # Include daftar name
         )])
 
         buttons.append([InlineKeyboardButton(
@@ -464,7 +464,8 @@ async def send_poem(
     poem_id: int,
     show_full: bool = False,
     part: int = 0,
-    search_term: str = ""
+    search_term: str = "",
+    current_daftar: Optional[str] = None  # Add this parameter
 ) -> None:
     await show_loading(update_or_query, "Ҳангоми боргирии шеър...")
     
@@ -513,9 +514,11 @@ async def send_poem(
                     keyboard.append(nav_buttons)
 
             daftar_name = poem['volume_number']
+            # Use the passed current_daftar if available, otherwise fall back to poem's daftar
+            back_daftar = current_daftar if current_daftar else daftar_name
             keyboard.append([InlineKeyboardButton(
-                f"↩️ Ба {daftar_name}",
-                callback_data=f"daftar_{daftar_name}_1"
+                f"↩️ Ба {back_daftar}",
+                callback_data=f"back_to_daftar_{back_daftar}"
             )])
 
             reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
@@ -587,8 +590,9 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
 
         keyboard = [[
-            InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse['unique_id']}")
-        ], [
+                InlineKeyboardButton("📖 Шеъри пурра", 
+                    callback_data=f"full_{verse['poem_id']}_0_{verse['volume_number']}")  # Include daftar
+            ]]
             InlineKeyboardButton("🔄 Мисраи нав", callback_data="daily_verse"),
             InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")
         ]]
@@ -658,7 +662,8 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     message_text += f"\n\nID: {poem['poem_id']}"
                 
                 keyboard = [[
-                    InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_{poem['poem_id']}_0")
+                    InlineKeyboardButton("📖 Шеъри пурра", 
+                        callback_data=f"full_{poem['poem_id']}_0_{poem['volume_number']}")  # Include daftar
                 ]]
                 
                 await send_message_safe(
@@ -742,13 +747,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parts = data.split("_")
             poem_id = int(parts[1])
             part = int(parts[2]) if len(parts) > 2 else 0
-            await send_poem(query, poem_id, show_full=True, part=part)
+            # Get daftar name from callback data if available
+            current_daftar = parts[3] if len(parts) > 3 else None
+            await send_poem(query, poem_id, show_full=True, part=part, current_daftar=current_daftar)
 
         elif data.startswith("full_"):
             parts = data.split("_")
             poem_id = int(parts[1])
             part = int(parts[2]) if len(parts) > 2 else 0
-            await send_poem(query, poem_id, show_full=True, part=part)
+            # Get daftar name from callback data if available
+            current_daftar = parts[3] if len(parts) > 3 else None
+            await send_poem(query, poem_id, show_full=True, part=part, current_daftar=current_daftar)
 
         elif data == "masnavi_info":
             await masnavi_info(query, context)
@@ -780,6 +789,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         elif data == "back_to_daftars":
             await masnavi_info(query, context)
+
+        elif data.startswith("back_to_daftar_"):
+            daftar_name = data.split("_")[3]
+            await show_poems_page(query, context, daftar_name, page=1)
 
         elif data == "daily_verse":
             await daily_verse(query, context)
