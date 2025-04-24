@@ -348,10 +348,11 @@ async def show_poems_page(update: Update, context: ContextTypes.DEFAULT_TYPE, da
         callback_data="back_to_daftars"
     )])
 
-    buttons.append([InlineKeyboardButton(
-        "🏠 Ба аввал",
-        callback_data="back_to_start"
-    )])
+    # Removed the redundant "Ба аввал" here
+    # buttons.append([InlineKeyboardButton(
+    #     "🏠 Ба аввал",
+    #     callback_data="back_to_start"
+    # )])
 
     message_text = (
         f"📖 <b>{daftar_name}</b>\n"
@@ -414,17 +415,11 @@ async def send_poem(update_or_query, poem_id, show_full=False, part=0, search_te
                 keyboard.append(nav_buttons)
 
         back_button = []
-        if isinstance(update_or_query, CallbackQuery) and 'full_poem_' in update_or_query.data:
-            back_button.append(InlineKeyboardButton(
-                "↩️ Ба мисраи рӯз",
-                callback_data=f"back_to_daily_{poem_id}"
-            ))
-        else:
-            daftar_name = poem['volume_number']
-            back_button.append(InlineKeyboardButton(
-                f"↩️ Ба {daftar_name}",
-                callback_data=f"back_to_daftar_{daftar_name}"
-            ))
+        daftar_name = poem['volume_number']
+        back_button.append(InlineKeyboardButton(
+            f"↩️ Ба {daftar_name}",
+            callback_data=f"daftar_{daftar_name}_1"  # Go back to the first page of the daftar
+        ))
         keyboard.append(back_button)
 
         reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
@@ -621,7 +616,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             elif data.startswith("back_to_daftar_"):
                 daftar_name = data.split("_")[3]
-                await show_poems_page(update, context, daftar_name)
+                await show_poems_page(update, context, daftar_name, page=1) # Always go back to the first page
 
             elif data.startswith("daftar_"):
                 parts = data.split("_")
@@ -630,7 +625,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     page = int(parts[2])
                     await show_poems_page(update, context, daftar_name, page)
                 else:
-                    await show_poems_page(update, context, daftar_name)
+                    await show_poems_page(update, context, daftar_name, page=1) # Default to page 1
 
             elif data == "back_to_daftars":
                 await masnavi_info(query, context)
@@ -638,6 +633,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Error in button_callback: {e}")
             await query.answer("Хатоги дар коркарди фармонат рух дод. Лутфан аз нав кӯшиш кунед.")
+    else:
+        logger.warning("Received a button callback without a query.")
 
 ADMIN_USER_IDS = list(map(int, os.getenv('ADMIN_IDS', '').split(',')))
 
