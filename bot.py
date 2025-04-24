@@ -234,8 +234,7 @@ async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         poem_unique_id = int(context.args[0])
-        verse_text = ' '.join(context.args[1:]).replace('||', '
-')
+        verse_text = ' '.join(context.args[1:]).replace('||', '\n')
         if db.is_highlight_exists(poem_unique_id, verse_text):
             await update.message.reply_text("⚠️ Ин мисра аллакай мавҷуд аст.")
             return
