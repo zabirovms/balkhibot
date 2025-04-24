@@ -202,16 +202,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if verse:
                 message_text = (
-                    f"🌟 <b>Мисраи рӯз</b> 🌟
-
-"
-                    f"📖 <b>{verse[0]['book_title']}</b>
-"
-                    f"📜 <b>{verse[0]['volume_number']} - Бахши {verse[0]['poem_id']}</b>
-
-"
-                    f"<i>{verse[0]['verse_text']}</i>"
+                    f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
+                    f"📖 <b>{verse['book_title']}</b>\n"
+                    f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
+                    f"<i>{verse['verse_text']}</i>"
                 )
+
                 keyboard = [[
                     InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse[0]['unique_id']}")
                 ]]
@@ -364,16 +360,11 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_message_safe(update, "⚠️ Мисраи рӯз ёфт нашуд.")
         return
     message_text = (
-        f"🌟 <b>Мисраи рӯз</b> 🌟
-
-"
-        f"📖 <b>{verse['book_title']}</b>
-"
-        f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>
-
-"
-        f"<i>{verse['verse_text']}</i>"
-    )
+                    f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
+                    f"📖 <b>{verse['book_title']}</b>\n"
+                    f"📜 <b>{verse['volume_number']} - Бахши {verse['poem_id']}</b>\n\n"
+                    f"<i>{verse['verse_text']}</i>"
+                )
     keyboard = [[
         InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse['unique_id']}")
     ]]
