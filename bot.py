@@ -3,12 +3,10 @@ import logging
 import psycopg2
 import time
 import re
-import random
 from datetime import date
-from psycopg2 import sql
-from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from psycopg2.extras import DictCursor
+from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 # Logging Setup
 logging.basicConfig(
@@ -35,41 +33,41 @@ class DatabaseManager:
         try:
             # 1. Add unique_id to poems if not exists
             if not self.execute_query("""
-                SELECT column_name FROM information_schema.columns 
-                WHERE table_name = 'poems' AND column_name = 'unique_id'
-                """, fetch=True):
+                    SELECT column_name FROM information_schema.columns 
+                    WHERE table_name = 'poems' AND column_name = 'unique_id'
+                    """, fetch=True):
                 
                 self.execute_query("ALTER TABLE poems ADD COLUMN unique_id SERIAL PRIMARY KEY")
                 logger.info("Added unique_id to poems table")
 
             # 2. Recreate highlighted_verses with proper foreign key
             if not self.execute_query("""
-                SELECT table_name FROM information_schema.tables 
-                WHERE table_name = 'highlighted_verses'
-                """, fetch=True):
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_name = 'highlighted_verses'
+                    """, fetch=True):
                 
                 self.execute_query("""
-                CREATE TABLE highlighted_verses (
-                    id SERIAL PRIMARY KEY,
-                    poem_unique_id INTEGER NOT NULL REFERENCES poems(unique_id),
-                    verse_text TEXT NOT NULL
-                )
-                """)
+                    CREATE TABLE highlighted_verses (
+                        id SERIAL PRIMARY KEY,
+                        poem_unique_id INTEGER NOT NULL REFERENCES poems(unique_id),
+                        verse_text TEXT NOT NULL
+                    )
+                    """)
                 logger.info("Created new highlighted_verses table")
                 
                 # Migrate existing data if needed
                 if self.execute_query("SELECT 1 FROM poems LIMIT 1", fetch=True):
                     self.execute_query("""
-                    INSERT INTO highlighted_verses (poem_unique_id, verse_text)
-                    SELECT p.unique_id, p.poem_text FROM poems p
-                    WHERE EXISTS (
-                        SELECT 1 FROM poems p2 
-                        WHERE p2.book_title = p.book_title
-                        AND p2.volume_number = p.volume_number
-                        AND p2.poem_id = p.poem_id
-                        LIMIT 1
-                    )
-                    """)
+                        INSERT INTO highlighted_verses (poem_unique_id, verse_text)
+                        SELECT p.unique_id, p.poem_text FROM poems p
+                        WHERE EXISTS (
+                            SELECT 1 FROM poems p2 
+                            WHERE p2.book_title = p.book_title
+                            AND p2.volume_number = p.volume_number
+                            AND p2.poem_id = p.poem_id
+                            LIMIT 1
+                        )
+                        """)
                     logger.info("Migrated data to highlighted_verses")
 
             # 3. Add indexes for performance
@@ -121,7 +119,7 @@ class DatabaseManager:
             {'volume_number': 'Дафтари панҷум', 'volume_num': 5},
             {'volume_number': 'Дафтари шашум', 'volume_num': 6}
         ]
-    
+        
         # Check which daftars have poems in DB
         for daftar in daftars:
             query = """
@@ -133,7 +131,7 @@ class DatabaseManager:
             """
             result = self.execute_query(query, (daftar['volume_number'],), fetch=True)
             daftar['available'] = result[0][0] if result else False
-    
+        
         return daftars
 
     def get_poems_by_daftar(self, daftar_name):
@@ -187,7 +185,7 @@ class DatabaseManager:
         return bool(self.execute_query(query, (poem_unique_id, verse_text), fetch=True))
 
     def delete_highlighted_verse(self, highlight_id):
-        query = "DELETE FROM highlighted_verses WHERE verse_id = %s"
+        query = "DELETE FROM highlighted_verses WHERE id = %s"
         self.execute_query(query, (highlight_id,))
 
 
@@ -228,7 +226,7 @@ async def send_message_safe(update_or_query, text, **kwargs):
     try:
         if isinstance(update_or_query, Update) and update_or_query.message:
             await update_or_query.message.reply_text(text, **kwargs)
-        elif hasattr(update_or_query, 'edit_message_text'):
+        elif isinstance(update_or_query, CallbackQuery): # Add this condition
             await update_or_query.edit_message_text(text, **kwargs)
         elif hasattr(update_or_query, 'reply_text'):
             await update_or_query.reply_text(text, **kwargs)
@@ -560,7 +558,7 @@ async def handle_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query = update.callback_query # This line caused the error
     await query.answer()
     
     data = query.data
@@ -685,6 +683,7 @@ async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error deleting highlighted verse: {e}")
         await update.message.reply_text("❌ Хатогӣ дар ҳазфи мисра.")
+
 
 
 def main():
