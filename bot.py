@@ -113,14 +113,28 @@ class DatabaseManager:
             raise
 
     def get_all_daftars(self):
-        return [
-            {'volume_number': 'Дафтари аввал', 'volume_num': 1, 'available': True},
-            {'volume_number': 'Дафтари дуюм', 'volume_num': 2, 'available': True},
-            {'volume_number': 'Дафтари сеюм', 'volume_num': 3, 'available': True},
-            {'volume_number': 'Дафтари чорум', 'volume_num': 4, 'available': True},
-            {'volume_number': 'Дафтари панҷум', 'volume_num': 5, 'available': True},
-            {'volume_number': 'Дафтари шашум', 'volume_num': 6, 'available': False}
+        daftars = [
+            {'volume_number': 'Дафтари аввал', 'volume_num': 1},
+            {'volume_number': 'Дафтари дуюм', 'volume_num': 2},
+            {'volume_number': 'Дафтари сеюм', 'volume_num': 3},
+            {'volume_number': 'Дафтари чорум', 'volume_num': 4},
+            {'volume_number': 'Дафтари панҷум', 'volume_num': 5},
+            {'volume_number': 'Дафтари шашум', 'volume_num': 6}
         ]
+    
+        # Check which daftars have poems in DB
+        for daftar in daftars:
+            query = """
+                SELECT EXISTS (
+                SELECT 1 FROM poems 
+                WHERE volume_number = %s 
+                LIMIT 1
+            )
+            """
+            result = self.execute_query(query, (daftar['volume_number'],), fetch=True)
+            daftar['available'] = result[0][0] if result else False
+    
+        return daftars
 
     def get_poems_by_daftar(self, daftar_name):
         query = """
@@ -272,7 +286,7 @@ async def balkhi_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def masnavi_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    daftars = db.get_all_daftars()
+    daftars = db.get_all_daftars()  # Now returns dynamic availability
     buttons = []
     for daftar in daftars:
         if daftar['available']:
