@@ -190,18 +190,6 @@ class DatabaseManager:
         query = "DELETE FROM highlighted_verses WHERE verse_id = %s"
         self.execute_query(query, (highlight_id,))
 
-    def get_daily_verse(self):
-        today = date.today()
-        query = """
-        SELECT p.*, hv.verse_text
-        FROM highlighted_verses hv
-        JOIN poems p ON p.unique_id = hv.poem_unique_id
-        ORDER BY RANDOM()
-        LIMIT 1
-        """
-        result = self.execute_query(query, fetch=True)
-        return result[0] if result else None
-
 
     def close(self):
         if self.conn:
