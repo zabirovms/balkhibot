@@ -556,86 +556,88 @@ async def handle_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=ReplyKeyboardMarkup([["🏠 Ба аввал"]], resize_keyboard=True)
     )
 
-async def button_callback(update: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
-    await update.answer()
-    data = update.data
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query:
+        await query.answer()
+        data = query.data
 
-    try:
-        if data.startswith("full_poem_"):
-            unique_id = int(data.split("_")[2])
-            poem = db.execute_query(
-                "SELECT * FROM poems WHERE unique_id = %s",
-                (unique_id,),
-                fetch=True
-            )
-            if poem:
-                await send_poem(update, poem[0]['poem_id'], show_full=True)
-
-        elif data.startswith("poem_"):
-            parts = data.split("_")
-            poem_id = int(parts[1])
-            part = int(parts[2]) if len(parts) > 2 else 0
-            await send_poem(update, poem_id, show_full=True, part=part)
-
-        elif data.startswith("back_to_daily_"):
-            poem_id = int(data.split("_")[3])
-            verse = db.execute_query(
-                "SELECT p.*, hv.verse_text FROM highlighted_verses hv "
-                "JOIN poems p ON p.unique_id = hv.poem_unique_id "
-                "WHERE p.poem_id = %s",
-                (poem_id,),
-                fetch=True
-            )
-            if verse:
-                message_text = (
-                    f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
-                    f"📖 <b>{verse[0]['book_title']}</b>\n"
-                    f"📜 <b>{verse[0]['volume_number']} - Бахши {verse[0]['poem_id']}</b>\n\n"
-                    f"<i>{verse[0]['verse_text']}</i>"
+        try:
+            if data.startswith("full_poem_"):
+                unique_id = int(data.split("_")[2])
+                poem = db.execute_query(
+                    "SELECT * FROM poems WHERE unique_id = %s",
+                    (unique_id,),
+                    fetch=True
                 )
-                keyboard = [[
-                    InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse[0]['unique_id']}")
-                ]]
-                await update.edit_message_text(
-                    text=message_text,
-                    parse_mode='HTML',
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                if poem:
+                    await send_poem(query, poem[0]['poem_id'], show_full=True)
+
+            elif data.startswith("poem_"):
+                parts = data.split("_")
+                poem_id = int(parts[1])
+                part = int(parts[2]) if len(parts) > 2 else 0
+                await send_poem(query, poem_id, show_full=True, part=part)
+
+            elif data.startswith("back_to_daily_"):
+                poem_id = int(data.split("_")[3])
+                verse = db.execute_query(
+                    "SELECT p.*, hv.verse_text FROM highlighted_verses hv "
+                    "JOIN poems p ON p.unique_id = hv.poem_unique_id "
+                    "WHERE p.poem_id = %s",
+                    (poem_id,),
+                    fetch=True
                 )
+                if verse:
+                    message_text = (
+                        f"🌟 <b>Мисраи рӯз</b> 🌟\n\n"
+                        f"📖 <b>{verse[0]['book_title']}</b>\n"
+                        f"📜 <b>{verse[0]['volume_number']} - Бахши {verse[0]['poem_id']}</b>\n\n"
+                        f"<i>{verse[0]['verse_text']}</i>"
+                    )
+                    keyboard = [[
+                        InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse[0]['unique_id']}")
+                    ]]
+                    await query.edit_message_text(
+                        text=message_text,
+                        parse_mode='HTML',
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
 
-        elif data == "masnavi_info":
-            await masnavi_info(update, context)
+            elif data == "masnavi_info":
+                await masnavi_info(query, context)
 
-        elif data == "divan_info":
-            await divan_info(update, context)
+            elif data == "divan_info":
+                await divan_info(query, context)
 
-        elif data == "back_to_info":
-            await balkhi_info(update, context)
+            elif data == "back_to_info":
+                await balkhi_info(query, context)
 
-        elif data == "back_to_start":
-            await start(update, context)
+            elif data == "back_to_start":
+                await start(query, context)
 
-        elif data == "unavailable_daftar":
-            await update.answer("Ин дафтар айни ҳол дастрас нест", show_alert=True)
+            elif data == "unavailable_daftar":
+                await query.answer("Ин дафтар айни ҳол дастрас нест", show_alert=True)
 
-        elif data.startswith("back_to_daftar_"):
-            daftar_name = data.split("_")[3]
-            await show_poems_page(update, context, daftar_name)
-
-        elif data.startswith("daftar_"):
-            parts = data.split("_")
-            daftar_name = parts[1]
-            if len(parts) > 2:
-                page = int(parts[2])
-                await show_poems_page(update, context, daftar_name, page)
-            else:
+            elif data.startswith("back_to_daftar_"):
+                daftar_name = data.split("_")[3]
                 await show_poems_page(update, context, daftar_name)
 
-        elif data == "back_to_daftars":
-            await masnavi_info(update, context)
+            elif data.startswith("daftar_"):
+                parts = data.split("_")
+                daftar_name = parts[1]
+                if len(parts) > 2:
+                    page = int(parts[2])
+                    await show_poems_page(update, context, daftar_name, page)
+                else:
+                    await show_poems_page(update, context, daftar_name)
 
-    except Exception as e:
-        logger.error(f"Error in button_callback: {e}")
-        await update.answer("Хатоги дар коркарди фармонат рух дод. Лутфан аз нав кӯшиш кунед.")
+            elif data == "back_to_daftars":
+                await masnavi_info(query, context)
+
+        except Exception as e:
+            logger.error(f"Error in button_callback: {e}")
+            await query.answer("Хатоги дар коркарди фармонат рух дод. Лутфан аз нав кӯшиш кунед.")
 
 ADMIN_USER_IDS = list(map(int, os.getenv('ADMIN_IDS', '').split(',')))
 
