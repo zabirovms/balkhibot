@@ -461,21 +461,27 @@ async def send_poem(update_or_query, poem_id, volume_number=None, show_full=Fals
         if search_term:
             poem_text = highlight_text(poem_text, search_term)
 
-        text_parts = split_long_message(poem_text)
+        # Split into parts of maximum 3000 characters to leave room for intro and formatting
+        text_parts = split_long_message(poem_text, max_length=3000)
+        total_parts = len(text_parts)
 
-        if show_full or len(text_parts) == 1:
+        if show_full or total_parts == 1:
             current_part = text_parts[part]
             message_text = f"{intro}<pre>{current_part}</pre>"
+            
+            if total_parts > 1:
+                message_text += f"\n\n📄 Қисми {part + 1} аз {total_parts}"
 
             keyboard = []
             nav_buttons = []
-            if len(text_parts) > 1:
+            
+            if total_parts > 1:
                 if part > 0:
                     nav_buttons.append(InlineKeyboardButton(
                         "⬅️ Қисми қаблӣ", 
                         callback_data=f"poem_{poem_id}_{part-1}"
                     ))
-                if part < len(text_parts) - 1:
+                if part < total_parts - 1:
                     nav_buttons.append(InlineKeyboardButton(
                         "Қисми баъдӣ ➡️", 
                         callback_data=f"poem_{poem_id}_{part+1}"
@@ -515,17 +521,33 @@ async def send_poem(update_or_query, poem_id, volume_number=None, show_full=Fals
                     )
             except Exception as e:
                 logger.error(f"Error sending poem part: {e}")
-                plain_text = f"{poem['book_title']}\n{poem['volume_number']} - Бахши {poem['poem_id']}\n{poem['section_title']}\n{current_part}"
-                await send_message_safe(update_or_query, plain_text)
+                # If HTML formatting fails, try sending without formatting
+                try:
+                    plain_text = f"{poem['book_title']}\n{poem['volume_number']} - Бахши {poem['poem_id']}\n{poem['section_title']}\n\n{current_part}"
+                    if total_parts > 1:
+                        plain_text += f"\n\nҚисми {part + 1} аз {total_parts}"
+                    await send_message_safe(
+                        update_or_query, 
+                        plain_text,
+                        reply_markup=reply_markup
+                    )
+                except Exception as e2:
+                    logger.error(f"Error sending plain text: {e2}")
+                    await send_message_safe(
+                        update_or_query, 
+                        "⚠️ Хатогӣ дар фиристодани матн."
+                    )
 
         else:
             # Show preview with "read full" button if not showing full
-            preview_text = text_parts[0] + "\n\n... (шеър тӯлонӣ аст)"
+            preview_length = min(len(text_parts[0]), 1000)  # Limit preview to 1000 chars
+            preview_text = text_parts[0][:preview_length] + "\n\n... (давомаш ҳаст)"
             message_text = f"{intro}<pre>{preview_text}</pre>"
 
-            keyboard = [[
-                InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_{poem_id}_0")
-            ]]
+            keyboard = [
+                [InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_{poem_id}_0")],
+                [InlineKeyboardButton(f"↩️ Ба {poem['volume_number']}", callback_data=f"back_to_daftar_{poem['volume_number']}")]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await send_message_safe(
@@ -782,8 +804,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"<i>{verse['verse_text']}</i>\n\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━"
                     )
-                    # Create a shorter callback data by using just the unique_id
                     keyboard = [
+                        [InlineKeyboardButton("🔄 Мисраи дигар", callback_data="daily_verse")],
                         [InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_poem_{verse['unique_id']}")],
                         [InlineKeyboardButton("🏠 Ба саҳифаи аввал", callback_data="back_to_start")]
                     ]
@@ -831,7 +853,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 poem_text = highlight_text(poem[0]['poem_text'], highlighted_verse) if highlighted_verse else poem[0]['poem_text']
                 keyboard = [
-                    [InlineKeyboardButton("↩️ Ба дафтарҳо", callback_data="back_to_daftars")],
+                    [InlineKeyboardButton("↩️ Бозгашт ба Мисраи рӯз", callback_data="daily_verse")],
                     [InlineKeyboardButton("🏠 Ба саҳифаи аввал", callback_data="back_to_start")]
                 ]
                 await query.edit_message_text(
