@@ -160,7 +160,7 @@ class DatabaseManager:
 
     def search_poems(self, search_term: str) -> List[Dict[str, Any]]:
         query = """
-        SELECT poem_id, book_title, volume_number, section_title, poem_text
+        SELECT poem_id, book_title, volume_number, section_title, poem_text, unique_id
         FROM poems
         WHERE poem_tsv @@ plainto_tsquery('simple', %s)
         ORDER BY ts_rank(poem_tsv, plainto_tsquery('simple', %s)) DESC
@@ -175,7 +175,7 @@ class DatabaseManager:
 
     def get_daily_verse(self) -> Optional[Dict[str, Any]]:
         query = """
-        SELECT p.*, hv.verse_text
+        SELECT p.*, hv.verse_text, p.unique_id
         FROM highlighted_verses hv
         JOIN poems p ON p.unique_id = hv.poem_unique_id
         ORDER BY RANDOM()
@@ -278,7 +278,10 @@ async def send_message_safe(
                     **kwargs
                 )
 
-async def show_loading(update_or_query: Union[Update, CallbackQuery], text: str = "Интизор шавед...") -> None:
+async def show_loading(
+    update_or_query: Union[Update, CallbackQuery],
+    text: str = "Интизор шавед..."
+) -> None:
     """Show a loading message while processing data"""
     await send_message_safe(
         update_or_query,
@@ -323,11 +326,11 @@ async def balkhi_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def masnavi_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await show_loading(update, "Дафтарҳои Маснавӣ...")
-    
+
     try:
         daftars = db.get_all_daftars()
         buttons = []
-        
+
         for daftar in daftars:
             if daftar['available']:
                 buttons.append([InlineKeyboardButton(
@@ -373,7 +376,7 @@ async def show_poems_page(
     page: int = 1
 ) -> None:
     await show_loading(update, f"Ҳангоми боргирии {daftar_name}...")
-    
+
     try:
         poems = db.get_poems_by_daftar(daftar_name)
         total = len(poems)
@@ -401,7 +404,7 @@ async def show_poems_page(
         for poem in poem_chunks[current_chunk]:
             buttons.append([InlineKeyboardButton(
                 f"Бахши {poem['poem_id']}",
-                callback_data=f"poem_{poem['poem_id']}"
+                callback_data=f"poem_{poem['poem_id']}_0_{daftar_name}"  # Include daftar_name
             )])
 
         nav_buttons = []
@@ -418,11 +421,6 @@ async def show_poems_page(
 
         if nav_buttons:
             buttons.append(nav_buttons)
-
-        buttons.append([InlineKeyboardButton(
-            f"Бахши {poem['poem_id']}",
-            callback_data=f"poem_{poem['poem_id']}_0_{daftar_name}"  # Include daftar name
-        )])
 
         buttons.append([InlineKeyboardButton(
             "🏠 Ба аввал",
@@ -468,7 +466,7 @@ async def send_poem(
     current_daftar: Optional[str] = None  # Add this parameter
 ) -> None:
     await show_loading(update_or_query, "Ҳангоми боргирии шеър...")
-    
+
     try:
         poem = db.get_poem_by_id(poem_id)
         if not poem:
@@ -503,12 +501,12 @@ async def send_poem(
                 if part > 0:
                     nav_buttons.append(InlineKeyboardButton(
                         "⬅️ Қисми қаблӣ",
-                        callback_data=f"poem_{poem_id}_{part-1}"
+                        callback_data=f"poem_{poem_id}_{part-1}_{current_daftar}"
                     ))
                 if part < len(text_parts) - 1:
                     nav_buttons.append(InlineKeyboardButton(
                         "Қисми баъдӣ ➡️",
-                        callback_data=f"poem_{poem_id}_{part+1}"
+                        callback_data=f"poem_{poem_id}_{part+1}_{current_daftar}"
                     ))
                 if nav_buttons:
                     keyboard.append(nav_buttons)
@@ -534,7 +532,7 @@ async def send_poem(
             message_text = f"{intro}<pre>{preview_text}</pre>"
 
             keyboard = [[
-                InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_{poem_id}_0")
+                InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_{poem_id}_0_{current_daftar}")
             ]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -568,7 +566,7 @@ async def divan_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await show_loading(update, "Ҳангоми ҷустуҷӯи мисраи рӯз...")
-    
+
     try:
         verse = db.get_daily_verse()
         if not verse:
@@ -591,7 +589,7 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         keyboard = [
             [
-                InlineKeyboardButton("📖 Шеъри пурра", 
+                InlineKeyboardButton("📖 Шеъри пурра",
                     callback_data=f"full_{verse['poem_id']}_0_{verse['volume_number']}")
             ],
             [
@@ -599,7 +597,7 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")
             ]
         ]
-        
+
 
         if isinstance(update, CallbackQuery):
             await update.edit_message_text(
@@ -636,7 +634,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await show_loading(update, f"Ҳангоми ҷустуҷӯи '{search_term}'...")
-    
+
     try:
         poems = db.search_poems(search_term)
         if not poems:
@@ -664,12 +662,13 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 message_text = f"{intro}<pre>{part}</pre>"
                 if i == len(text_parts) - 1:
                     message_text += f"\n\nID: {poem['poem_id']}"
-                
+
+                # Include the volume_number (daftar name) in the callback data
                 keyboard = [[
-                    InlineKeyboardButton("📖 Шеъри пурра", 
-                        callback_data=f"full_{poem['poem_id']}_0_{poem['volume_number']}")  # Include daftar
+                    InlineKeyboardButton("📖 Шеъри пурра",
+                        callback_data=f"full_{poem['poem_id']}_0_{poem['volume_number']}")
                 ]]
-                
+
                 await send_message_safe(
                     update,
                     message_text,
@@ -738,20 +737,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
         if data.startswith("full_poem_"):
-            unique_id = int(data.split("_")[2])
+            parts = data.split("_")
+            unique_id = int(parts[2])
             poem = db.execute_query(
                 "SELECT * FROM poems WHERE unique_id = %s",
                 (unique_id,),
                 fetch=True
             )
             if poem:
-                await send_poem(query, poem[0]['poem_id'], show_full=True)
+                # Pass the daftar name to send_poem
+                daftar_name = parts[3] if len(parts) > 3 else None
+                await send_poem(query, poem[0]['poem_id'], show_full=True, current_daftar=daftar_name)
 
         elif data.startswith("poem_"):
             parts = data.split("_")
             poem_id = int(parts[1])
             part = int(parts[2]) if len(parts) > 2 else 0
-            # Get daftar name from callback data if available
+            # Pass the daftar name
             current_daftar = parts[3] if len(parts) > 3 else None
             await send_poem(query, poem_id, show_full=True, part=part, current_daftar=current_daftar)
 
@@ -759,7 +761,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parts = data.split("_")
             poem_id = int(parts[1])
             part = int(parts[2]) if len(parts) > 2 else 0
-            # Get daftar name from callback data if available
+             # Pass the daftar name
             current_daftar = parts[3] if len(parts) > 3 else None
             await send_poem(query, poem_id, show_full=True, part=part, current_daftar=current_daftar)
 
@@ -807,24 +809,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await search(query, context)
 
         elif data == "search_again":
-            await send_message_safe(
-                query,
-                "Лутфан калимаро пас аз /search ворид намоед. Масалан: /search ишқ",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-                ])
-            )
+            await search(query, context)
 
     except Exception as e:
         logger.error(f"Error in button_callback: {e}")
         await query.answer("Хатоги дар коркарди фармонат рух дод. Лутфан аз нав кӯшиш кунед.")
-        await send_message_safe(
-            query,
-            "❌ Хатогӣ дар коркарди фармонат рух дод.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-            ])
-        )
 
 async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -833,39 +822,26 @@ async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if not context.args or len(context.args) < 2:
-        await update.message.reply_text(
-            "Истифода: /highlight <unique_id> <матни мисра>\n\n"
-            "Барои сатрҳои нав, аз '||' истифода баред.",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text("Истифода: /highlight <unique_id> <матни мисра>")
         return
 
     try:
         poem_unique_id = int(context.args[0])
         verse_text = ' '.join(context.args[1:])
-        verse_text = verse_text.replace('||', '\n')
+        verse_text = verse_text.replace('||', '\n')  # convert line markers to actual line breaks
 
         if db.is_highlight_exists(poem_unique_id, verse_text):
-            await update.message.reply_text(
-                "⚠️ Ин мисра аллакай дар <i>highlighted_verses</i> мавҷуд аст.",
-                parse_mode='HTML'
-            )
+            await update.message.reply_text("⚠️ Ин мисра аллакай дар <i>highlighted_verses</i> мавҷуд аст.", parse_mode='HTML')
             return
 
         db.add_highlighted_verse(poem_unique_id, verse_text)
-        await update.message.reply_text(
-            f"✅ Мисра ба <i>highlighted_verses</i> илова шуд:\n\n<pre>{verse_text}</pre>",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(f"✅ Мисра ба <i>highlighted_verses</i> илова шуд:\n\n<pre>{verse_text}</pre>", parse_mode='HTML')
     except Exception as e:
         logger.error(f"Error adding highlighted verse: {e}")
-        await update.message.reply_text(
-            "❌ Хатогӣ дар иловаи мисра. Лутфан ID-и дурустро ворид кунед.",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text("❌ Хатогӣ дар иловаи мисра.")
 
 
-async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     if user_id not in ADMIN_USER_IDS:
         await update.message.reply_text("⛔️ Шумо иҷозати иҷрои ин фармонро надоред.")
@@ -921,3 +897,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
