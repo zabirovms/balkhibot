@@ -7,6 +7,7 @@ import random
 from datetime import date
 from psycopg2 import sql
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from itertools import zip_longest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from psycopg2.extras import DictCursor
 
@@ -365,11 +366,27 @@ async def show_poems_page(update: Update, context: ContextTypes.DEFAULT_TYPE, da
 
     current_chunk = page - 1
     buttons = []
-    for poem in poem_chunks[current_chunk]:
-        buttons.append([InlineKeyboardButton(
-            f"Бахши {poem['poem_id']}", 
-            callback_data=f"poem_{poem['poem_id']}"
-        )])
+    current_poems = poem_chunks[current_chunk]
+    
+    # Split poems into two columns (5 each)
+    mid_point = len(current_poems) // 2 + len(current_poems) % 2  # Handle odd number of poems
+    left_column = current_poems[:mid_point]
+    right_column = current_poems[mid_point:]
+    
+    # Create rows with two buttons each
+    for left, right in zip_longest(left_column, right_column):
+        row = []
+        if left:
+            row.append(InlineKeyboardButton(
+                f"Бахши {left['poem_id']}", 
+                callback_data=f"poem_{left['poem_id']}"
+            ))
+        if right:
+            row.append(InlineKeyboardButton(
+                f"Бахши {right['poem_id']}", 
+                callback_data=f"poem_{right['poem_id']}"
+            ))
+        buttons.append(row)
 
     nav_buttons = []
     if current_chunk > 0:
