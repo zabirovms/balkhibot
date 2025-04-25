@@ -36,13 +36,32 @@ ADMIN_USER_IDS = list(map(int, os.getenv('ADMIN_IDS', '').split(','))) if os.get
 # Constants
 MAX_MESSAGE_LENGTH = 4000
 DAFTAR_NAMES = [
-    {'volume_number': 'Дафтари аввал', 'volume_num': 1},
-    {'volume_number': 'Дафтари дуюм', 'volume_num': 2},
-    {'volume_number': 'Дафтари сеюм', 'volume_num': 3},
-    {'volume_number': 'Дафтари чорум', 'volume_num': 4},
-    {'volume_number': 'Дафтари панҷум', 'volume_num': 5},
-    {'volume_number': 'Дафтари шашум', 'volume_num': 6}
+    {'volume_number': 'Дафтари 1', 'volume_num': 1},
+    {'volume_number': 'Дафтари 2', 'volume_num': 2},
+    {'volume_number': 'Дафтари 3', 'volume_num': 3},
+    {'volume_number': 'Дафтари 4', 'volume_num': 4},
+    {'volume_number': 'Дафтари 5', 'volume_num': 5},
+    {'volume_number': 'Дафтари 6', 'volume_num': 6}
 ]
+
+# Emoji constants for better visual organization
+EMOJI = {
+    'home': '🏠',
+    'back': '↩️',
+    'search': '🔍',
+    'book': '📖',
+    'poem': '📜',
+    'info': 'ℹ️',
+    'daily': '🌟',
+    'next': '➡️',
+    'prev': '⬅️',
+    'loading': '⏳',
+    'error': '❌',
+    'success': '✅',
+    'admin': '⚙️',
+    'divan': '🌹',
+    'masnavi': '🕌'
+}
 
 class DatabaseManager:
     def __init__(self, max_retries: int = 3, retry_delay: int = 2):
@@ -160,7 +179,7 @@ class DatabaseManager:
 
     def search_poems(self, search_term: str) -> List[Dict[str, Any]]:
         query = """
-        SELECT poem_id, book_title, volume_number, section_title, poem_text, unique_id
+        SELECT poem_id, book_title, volume_number, section_title, poem_text
         FROM poems
         WHERE poem_tsv @@ plainto_tsquery('simple', %s)
         ORDER BY ts_rank(poem_tsv, plainto_tsquery('simple', %s)) DESC
@@ -175,7 +194,7 @@ class DatabaseManager:
 
     def get_daily_verse(self) -> Optional[Dict[str, Any]]:
         query = """
-        SELECT p.*, hv.verse_text, p.unique_id
+        SELECT p.*, hv.verse_text
         FROM highlighted_verses hv
         JOIN poems p ON p.unique_id = hv.poem_unique_id
         ORDER BY RANDOM()
@@ -278,10 +297,7 @@ async def send_message_safe(
                     **kwargs
                 )
 
-async def show_loading(
-    update_or_query: Union[Update, CallbackQuery],
-    text: str = "Интизор шавед..."
-) -> None:
+async def show_loading(update_or_query: Union[Update, CallbackQuery], text: str = f"{EMOJI['loading']} Интизор шавед...") -> None:
     """Show a loading message while processing data"""
     await send_message_safe(
         update_or_query,
@@ -292,29 +308,31 @@ async def show_loading(
 # ================== COMMAND HANDLERS ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [
-        ["Маснавии Маънавӣ"],
-        ["Девони Шамс"],
-        ["Ҷустуҷӯ", "Маълумот дар бораи Балхӣ"],
-        ["Мисраи рӯз"]
+        [f"{EMOJI['masnavi']} Маснавии Маънавӣ"],
+        [f"{EMOJI['divan']} Девони Шамс"],
+        [f"{EMOJI['search']} Ҷустуҷӯ", f"{EMOJI['info']} Маълумот"],
+        [f"{EMOJI['daily']} Мисраи рӯз"]
     ]
     await send_message_safe(
         update,
-        "Асарҳои Мавлоно Ҷалолуддини Балхӣ. Лутфан аз рӯйи тугмаҳои зер интихоб кунед:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
+        f"""🌟 <b>Асарҳои Мавлоно Ҷалолуддини Балхӣ</b> 🌟
+
+Аз ин рӯйхат як интихоб кунед:""",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False),
         parse_mode='HTML'
     )
 
 async def balkhi_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    info_text = (
-        "📖 <b>Маълумот дар бораи Мавлоно Ҷалолуддини Балхӣ</b>\n\n"
-        "Барои хондани тарҷумаи ҳол ва осораш, тугмаи зерро пахш кунед:"
-    )
+    info_text = f"""
+📚 <b>Маълумот дар бораи Мавлоно Ҷалолуддини Балхӣ</b>
+
+Мавлоно Ҷалолуддини Муҳаммади Балхӣ (Румӣ) аз бузургтарин шоирони адабиёти форс-тоҷик аст. Осори ӯ аз ҷумлаи гаронбаҳотарин мероси адабии тоҷикон мебошад.
+"""
 
     keyboard = [
-        [InlineKeyboardButton("📜 Маълумот дар Telegra.ph", url="https://telegra.ph/Mavlonoi-Balh-04-23")],
-        [InlineKeyboardButton("Маснавии Маънавӣ", callback_data="masnavi_info")],
-        [InlineKeyboardButton("Девони Шамс", callback_data="divan_info")],
-        [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
+        [InlineKeyboardButton(f"{EMOJI['book']} Маснавии Маънавӣ", callback_data="masnavi_info")],
+        [InlineKeyboardButton(f"{EMOJI['book']} Девони Шамс", callback_data="divan_info")],
+        [InlineKeyboardButton(f"{EMOJI['back']} Бозгашт", callback_data="back_to_start")]
     ]
 
     await send_message_safe(
@@ -325,48 +343,46 @@ async def balkhi_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 async def masnavi_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await show_loading(update, "Дафтарҳои Маснавӣ...")
-
+    await show_loading(update, f"{EMOJI['loading']} Дафтарҳо бор карда мешаванд...")
+    
     try:
         daftars = db.get_all_daftars()
         buttons = []
-
+        
         for daftar in daftars:
             if daftar['available']:
                 buttons.append([InlineKeyboardButton(
-                    daftar['volume_number'],
+                    f"{EMOJI['book']} {daftar['volume_number']}",
                     callback_data=f"daftar_{daftar['volume_number']}"
                 )])
             else:
                 buttons.append([InlineKeyboardButton(
-                    f"{daftar['volume_number']} (дастрас нест)",
+                    f"{EMOJI['error']} {daftar['volume_number']} (дастрас нест)",
                     callback_data="unavailable_daftar"
                 )])
 
-        buttons.append([InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")])
+        buttons.append([InlineKeyboardButton(f"{EMOJI['back']} Бозгашт", callback_data="back_to_start")])
 
-        if isinstance(update, CallbackQuery):
-            await update.edit_message_text(
-                text="Дафтарҳои Маснавӣ:",
-                reply_markup=InlineKeyboardMarkup(buttons),
-                parse_mode='HTML'
-            )
-        else:
-            await send_message_safe(
-                update,
-                "Дафтарҳои Маснавӣ:",
-                reply_markup=InlineKeyboardMarkup(buttons),
-                parse_mode='HTML'
-            )
+        await send_message_safe(
+            update,
+            f"""📖 <b>Маснавии Маънавӣ</b>
+
+Интихоб кардани дафтар:""",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode='HTML'
+        )
     except Exception as e:
         logger.error(f"Error in masnavi_info: {e}")
         await send_message_safe(
             update,
-            "❌ Хатогӣ дар дастрасӣ ба дафтарҳо. Лутфан аз нав кӯшиш кунед.",
+            f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Дафтарҳо бор карда нашуданд. Лутфан баъдтар аз нав кӯшиш кунед.""",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("↩️ Аз нав кӯшиш кунед", callback_data="masnavi_info")],
-                [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-            ])
+                [InlineKeyboardButton(f"{EMOJI['back']} Аз нав кӯшиш кунед", callback_data="masnavi_info")],
+                [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+            ]),
+            parse_mode='HTML'
         )
 
 async def show_poems_page(
@@ -375,8 +391,8 @@ async def show_poems_page(
     daftar_name: str,
     page: int = 1
 ) -> None:
-    await show_loading(update, f"Ҳангоми боргирии {daftar_name}...")
-
+    await show_loading(update, f"{EMOJI['loading']} Боргирии шеърҳо...")
+    
     try:
         poems = db.get_poems_by_daftar(daftar_name)
         total = len(poems)
@@ -384,11 +400,14 @@ async def show_poems_page(
         if not poems:
             await send_message_safe(
                 update,
-                f"❌ Шеър дар '{daftar_name}' ёфт нашуд.",
+                f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Шеърҳо дар ин дафтар ёфт нашуд.""",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("↩️ Ба дафтарҳо", callback_data="back_to_daftars")],
-                    [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-                ])
+                    [InlineKeyboardButton(f"{EMOJI['back']} Ба дафтарҳо", callback_data="back_to_daftars")],
+                    [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+                ]),
+                parse_mode='HTML'
             )
             return
 
@@ -403,19 +422,19 @@ async def show_poems_page(
         buttons = []
         for poem in poem_chunks[current_chunk]:
             buttons.append([InlineKeyboardButton(
-                f"Бахши {poem['poem_id']}",
-                callback_data=f"poem_{poem['poem_id']}_0_{daftar_name}"  # Include daftar_name
+                f"{EMOJI['poem']} Бахши {poem['poem_id']}: {poem['section_title'][:30]}...",
+                callback_data=f"poem_{poem['poem_id']}"
             )])
 
         nav_buttons = []
         if current_chunk > 0:
             nav_buttons.append(InlineKeyboardButton(
-                "⬅️ Қаблӣ",
+                f"{EMOJI['prev']} Қаблӣ",
                 callback_data=f"daftar_{daftar_name}_{page-1}"
             ))
         if current_chunk < total_pages - 1:
             nav_buttons.append(InlineKeyboardButton(
-                "Баъдӣ ➡️",
+                f"Баъдӣ {EMOJI['next']}",
                 callback_data=f"daftar_{daftar_name}_{page+1}"
             ))
 
@@ -423,8 +442,8 @@ async def show_poems_page(
             buttons.append(nav_buttons)
 
         buttons.append([InlineKeyboardButton(
-            "🏠 Ба аввал",
-            callback_data="back_to_start"
+            f"{EMOJI['back']} Ба дафтарҳо",
+            callback_data="back_to_daftars"
         )])
 
         message_text = (
@@ -433,28 +452,24 @@ async def show_poems_page(
             f"Ҷамъи {total} бахш"
         )
 
-        if isinstance(update, CallbackQuery):
-            await update.edit_message_text(
-                text=message_text,
-                parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-        else:
-            await send_message_safe(
-                update,
-                message_text,
-                parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
+        await send_message_safe(
+            update,
+            message_text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
     except Exception as e:
         logger.error(f"Error in show_poems_page: {e}")
         await send_message_safe(
             update,
-            f"❌ Хатогӣ дар дастрасӣ ба {daftar_name}. Лутфан аз нав кӯшиш кунед.",
+            f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Шеърҳо бор карда нашуданд. Лутфан баъдтар аз нав кӯшиш кунед.""",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("↩️ Аз нав кӯшиш кунед", callback_data=f"daftar_{daftar_name}_{page}")],
-                [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-            ])
+                [InlineKeyboardButton(f"{EMOJI['back']} Аз нав кӯшиш кунед", callback_data=f"daftar_{daftar_name}_{page}")],
+                [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+            ]),
+            parse_mode='HTML'
         )
 
 async def send_poem(
@@ -463,19 +478,22 @@ async def send_poem(
     show_full: bool = False,
     part: int = 0,
     search_term: str = "",
-    current_daftar: Optional[str] = None  # Add this parameter
+    current_daftar: Optional[str] = None
 ) -> None:
-    await show_loading(update_or_query, "Ҳангоми боргирии шеър...")
-
+    await show_loading(update_or_query, f"{EMOJI['loading']} Шеър бор карда мешавад...")
+    
     try:
         poem = db.get_poem_by_id(poem_id)
         if not poem:
             await send_message_safe(
                 update_or_query,
-                "⚠️ Шеъри дархостшуда ёфт нашуд.",
+                f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Шеъри дархостшуда ёфт нашуд.""",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-                ])
+                    [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+                ]),
+                parse_mode='HTML'
             )
             return
 
@@ -500,23 +518,21 @@ async def send_poem(
                 nav_buttons = []
                 if part > 0:
                     nav_buttons.append(InlineKeyboardButton(
-                        "⬅️ Қисми қаблӣ",
-                        callback_data=f"poem_{poem_id}_{part-1}_{current_daftar}"
+                        f"{EMOJI['prev']} Қисми қаблӣ",
+                        callback_data=f"poem_{poem_id}_{part-1}"
                     ))
                 if part < len(text_parts) - 1:
                     nav_buttons.append(InlineKeyboardButton(
-                        "Қисми баъдӣ ➡️",
-                        callback_data=f"poem_{poem_id}_{part+1}_{current_daftar}"
+                        f"Қисми баъдӣ {EMOJI['next']}",
+                        callback_data=f"poem_{poem_id}_{part+1}"
                     ))
                 if nav_buttons:
                     keyboard.append(nav_buttons)
 
-            daftar_name = poem['volume_number']
-            # Use the passed current_daftar if available, otherwise fall back to poem's daftar
-            back_daftar = current_daftar if current_daftar else daftar_name
+            daftar_name = current_daftar if current_daftar else poem['volume_number']
             keyboard.append([InlineKeyboardButton(
-                f"↩️ Ба {back_daftar}",
-                callback_data=f"back_to_daftar_{back_daftar}"
+                f"{EMOJI['back']} Ба {daftar_name}",
+                callback_data=f"back_to_daftar_{daftar_name}"
             )])
 
             reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
@@ -532,7 +548,7 @@ async def send_poem(
             message_text = f"{intro}<pre>{preview_text}</pre>"
 
             keyboard = [[
-                InlineKeyboardButton("📖 Шеъри пурра", callback_data=f"full_{poem_id}_0_{current_daftar}")
+                InlineKeyboardButton(f"{EMOJI['book']} Шеъри пурра", callback_data=f"full_{poem_id}_0")
             ]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -546,37 +562,49 @@ async def send_poem(
         logger.error(f"Error in send_poem: {e}")
         await send_message_safe(
             update_or_query,
-            "❌ Хатогӣ дар боргирии шеър. Лутфан аз нав кӯшиш кунед.",
+            f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Шеър бор карда нашуд. Лутфан баъдтар аз нав кӯшиш кунед.""",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("↩️ Аз нав кӯшиш кунед", callback_data=f"poem_{poem_id}")],
-                [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-            ])
+                [InlineKeyboardButton(f"{EMOJI['back']} Аз нав кӯшиш кунед", callback_data=f"poem_{poem_id}")],
+                [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+            ]),
+            parse_mode='HTML'
         )
 
 async def divan_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    info_text = f"""
+🌹 <b>Девони Шамс</b>
+
+Девони Шамс ё Девони Кабир маҷмӯаи ғазалиёт ва ашъори лирикии Мавлоно Ҷалолуддини Балхӣ мебошад. Ин ашъор ба забони форсӣ суруда шудаанд.
+"""
+
     await send_message_safe(
         update,
-        "Девони Шамс - ғазалиёт ва ашъори лирикии Мавлоно.",
+        info_text,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("↩️ Бозгашт", callback_data="back_to_info")],
-            [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
+            [InlineKeyboardButton(f"{EMOJI['back']} Бозгашт", callback_data="back_to_info")],
+            [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
         ]),
         parse_mode='HTML'
     )
 
 async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await show_loading(update, "Ҳангоми ҷустуҷӯи мисраи рӯз...")
-
+    await show_loading(update, f"{EMOJI['loading']} Ҷустуҷӯи мисраи рӯз...")
+    
     try:
         verse = db.get_daily_verse()
         if not verse:
             await send_message_safe(
                 update,
-                "⚠️ Мисраи рӯз ёфт нашуд.",
+                f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Мисраи рӯз ёфт нашуд.""",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("↩️ Аз нав кӯшиш кунед", callback_data="daily_verse")],
-                    [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-                ])
+                    [InlineKeyboardButton(f"{EMOJI['back']} Аз нав кӯшиш кунед", callback_data="daily_verse")],
+                    [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+                ]),
+                parse_mode='HTML'
             )
             return
 
@@ -589,38 +617,33 @@ async def daily_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         keyboard = [
             [
-                InlineKeyboardButton("📖 Шеъри пурра",
+                InlineKeyboardButton(f"{EMOJI['book']} Шеъри пурра", 
                     callback_data=f"full_{verse['poem_id']}_0_{verse['volume_number']}")
             ],
             [
-                InlineKeyboardButton("🔄 Мисраи нав", callback_data="daily_verse"),
-                InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")
+                InlineKeyboardButton(f"{EMOJI['daily']} Мисраи нав", callback_data="daily_verse"),
+                InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")
             ]
         ]
 
-
-        if isinstance(update, CallbackQuery):
-            await update.edit_message_text(
-                message_text,
-                parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        else:
-            await send_message_safe(
-                update,
-                message_text,
-                parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+        await send_message_safe(
+            update,
+            message_text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     except Exception as e:
         logger.error(f"Error in daily_verse: {e}")
         await send_message_safe(
             update,
-            "❌ Хатогӣ дар ҷустуҷӯи мисраи рӯз. Лутфан аз нав кӯшиш кунед.",
+            f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Мисраи рӯз ёфт нашуд. Лутфан баъдтар аз нав кӯшиш кунед.""",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("↩️ Аз нав кӯшиш кунед", callback_data="daily_verse")],
-                [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-            ])
+                [InlineKeyboardButton(f"{EMOJI['back']} Аз нав кӯшиш кунед", callback_data="daily_verse")],
+                [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+            ]),
+            parse_mode='HTML'
         )
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -628,23 +651,31 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not search_term:
         await send_message_safe(
             update,
-            "⚠️ Лутфан калима ё мисраро барои ҷустуҷӯ ворид кунед.\n\nМисол: /search ишқ",
-            reply_markup=ReplyKeyboardMarkup([["🏠 Ба аввал"]], resize_keyboard=True)
+            f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Лутфан калима ё ибораро барои ҷустуҷӯ ворид кунед.
+
+Мисол: /search ишқ""",
+            reply_markup=ReplyKeyboardMarkup([[f"{EMOJI['home']} Ба аввал"]], resize_keyboard=True),
+            parse_mode='HTML'
         )
         return
 
-    await show_loading(update, f"Ҳангоми ҷустуҷӯи '{search_term}'...")
-
+    await show_loading(update, f"{EMOJI['loading']} Ҷустуҷӯи '{search_term}'...")
+    
     try:
         poems = db.search_poems(search_term)
         if not poems:
             await send_message_safe(
                 update,
-                f"⚠️ Ҳеҷ шеъре барои '{search_term}' ёфт нашуд.",
+                f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Ҳеҷ шеъре барои '{search_term}' ёфт нашуд.""",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("↩️ Ҷустуҷӯи нав", callback_data="search_again")],
-                    [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-                ])
+                    [InlineKeyboardButton(f"{EMOJI['search']} Ҷустуҷӯи нав", callback_data="search_again")],
+                    [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+                ]),
+                parse_mode='HTML'
             )
             return
 
@@ -653,6 +684,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text_parts = split_long_message(highlighted)
 
             intro = (
+                f"🔍 <b>Натиҷаи ҷустуҷӯ</b>\n\n"
                 f"📖 <b>{poem['book_title']}</b>\n"
                 f"📜 <b>{poem['volume_number']} - Бахши {poem['poem_id']}</b>\n"
                 f"🔹 {poem['section_title']}\n\n"
@@ -662,56 +694,65 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 message_text = f"{intro}<pre>{part}</pre>"
                 if i == len(text_parts) - 1:
                     message_text += f"\n\nID: {poem['poem_id']}"
-
-                # Include the volume_number (daftar name) in the callback data
+                
                 keyboard = [[
-                    InlineKeyboardButton("📖 Шеъри пурра",
+                    InlineKeyboardButton(f"{EMOJI['book']} Шеъри пурра", 
                         callback_data=f"full_{poem['poem_id']}_0_{poem['volume_number']}")
                 ]]
-
+                
                 await send_message_safe(
                     update,
                     message_text,
                     parse_mode='HTML',
                     reply_markup=InlineKeyboardMarkup(keyboard)
-                )
     except Exception as e:
         logger.error(f"Error in search: {e}")
         await send_message_safe(
             update,
-            f"❌ Хатогӣ дар ҷустуҷӯи '{search_term}'. Лутфан аз нав кӯшиш кунед.",
+            f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Ҷустуҷӯ иҷро нашуд. Лутфан баъдтар аз нав кӯшиш кунед.""",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("↩️ Аз нав кӯшиш кунед", callback_data=f"search_{search_term}")],
-                [InlineKeyboardButton("🏠 Ба аввал", callback_data="back_to_start")]
-            ])
+                [InlineKeyboardButton(f"{EMOJI['back']} Аз нав кӯшиш кунед", callback_data=f"search_{search_term}")],
+                [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+            ]),
+            parse_mode='HTML'
         )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text.strip()
 
-    if text == "Маснавии Маънавӣ":
+    if text == f"{EMOJI['masnavi']} Маснавии Маънавӣ":
         await masnavi_info(update, context)
-    elif text == "Маълумот дар бораи Балхӣ":
+    elif text == f"{EMOJI['info']} Маълумот":
         await balkhi_info(update, context)
-    elif text == "Мисраи рӯз":
+    elif text == f"{EMOJI['daily']} Мисраи рӯз":
         await daily_verse(update, context)
-    elif text == "Ҷустуҷӯ":
+    elif text == f"{EMOJI['search']} Ҷустуҷӯ":
         await send_message_safe(
             update,
-            "Лутфан калимаро пас аз /search ворид намоед. Масалан: /search ишқ",
-            reply_markup=ReplyKeyboardMarkup([["🏠 Ба аввал"]], resize_keyboard=True)
+            f"""🔍 <b>Ҷустуҷӯ</b>
+
+Лутфан калимаро пас аз /search ворид намоед.
+
+Мисол: /search ишқ""",
+            reply_markup=ReplyKeyboardMarkup([[f"{EMOJI['home']} Ба аввал"]], resize_keyboard=True),
+            parse_mode='HTML'
         )
-    elif text == "🏠 Ба аввал":
+    elif text == f"{EMOJI['home']} Ба аввал":
         await start(update, context)
-    elif text.startswith("Бахши "):
+    elif text.startswith(f"{EMOJI['poem']} Бахши "):
         try:
-            poem_id = int(text.split()[1])
+            poem_id = int(text.split()[2])
             await send_poem(update, poem_id)
         except (IndexError, ValueError):
             await send_message_safe(
                 update,
-                "⚠️ ID-и нодуруст",
-                reply_markup=ReplyKeyboardMarkup([["🏠 Ба аввал"]], resize_keyboard=True)
+                f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+ID-и нодуруст.""",
+                reply_markup=ReplyKeyboardMarkup([[f"{EMOJI['home']} Ба аввал"]], resize_keyboard=True),
+                parse_mode='HTML'
             )
     else:
         await handle_invalid_input(update, context)
@@ -719,8 +760,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def handle_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_message_safe(
         update,
-        "Лутфан аз тугмаҳои меню истифода баред ё бо фармони /search ҷустуҷӯ кунед.",
-        reply_markup=ReplyKeyboardMarkup([["🏠 Ба аввал"]], resize_keyboard=True)
+        f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Фармони номаълум. Лутфан аз тугмаҳои меню истифода баред ё бо фармони /search ҷустуҷӯ кунед.""",
+        reply_markup=ReplyKeyboardMarkup([[f"{EMOJI['home']} Ба аввал"]], resize_keyboard=True),
+        parse_mode='HTML'
     )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -737,23 +781,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
         if data.startswith("full_poem_"):
-            parts = data.split("_")
-            unique_id = int(parts[2])
+            unique_id = int(data.split("_")[2])
             poem = db.execute_query(
                 "SELECT * FROM poems WHERE unique_id = %s",
                 (unique_id,),
                 fetch=True
             )
             if poem:
-                # Pass the daftar name to send_poem
-                daftar_name = parts[3] if len(parts) > 3 else None
-                await send_poem(query, poem[0]['poem_id'], show_full=True, current_daftar=daftar_name)
+                await send_poem(query, poem[0]['poem_id'], show_full=True)
 
         elif data.startswith("poem_"):
             parts = data.split("_")
             poem_id = int(parts[1])
             part = int(parts[2]) if len(parts) > 2 else 0
-            # Pass the daftar name
             current_daftar = parts[3] if len(parts) > 3 else None
             await send_poem(query, poem_id, show_full=True, part=part, current_daftar=current_daftar)
 
@@ -761,7 +801,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parts = data.split("_")
             poem_id = int(parts[1])
             part = int(parts[2]) if len(parts) > 2 else 0
-             # Pass the daftar name
             current_daftar = parts[3] if len(parts) > 3 else None
             await send_poem(query, poem_id, show_full=True, part=part, current_daftar=current_daftar)
 
@@ -796,10 +835,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif data == "back_to_daftars":
             await masnavi_info(query, context)
 
-        elif data.startswith("back_to_daftar_"):
-            daftar_name = data.split("_")[3]
-            await show_poems_page(query, context, daftar_name, page=1)
-
         elif data == "daily_verse":
             await daily_verse(query, context)
 
@@ -809,57 +844,98 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await search(query, context)
 
         elif data == "search_again":
-            await search(query, context)
+            await send_message_safe(
+                query,
+                f"""🔍 <b>Ҷустуҷӯ</b>
+
+Лутфан калимаро пас аз /search ворид намоед.
+
+Мисол: /search ишқ""",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+                ]),
+                parse_mode='HTML'
+            )
 
     except Exception as e:
         logger.error(f"Error in button_callback: {e}")
         await query.answer("Хатоги дар коркарди фармонат рух дод. Лутфан аз нав кӯшиш кунед.")
+        await send_message_safe(
+            query,
+            f"""{EMOJI['error']} <b>Хатогӣ</b>
+
+Коркарди фармон иҷро нашуд.""",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"{EMOJI['home']} Ба аввал", callback_data="back_to_start")]
+            ]),
+            parse_mode='HTML'
+        )
 
 async def highlight_verse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     if user_id not in ADMIN_USER_IDS:
-        await update.message.reply_text("⛔️ Шумо иҷозати иҷрои ин фармонро надоред.")
+        await update.message.reply_text(f"{EMOJI['error']} Шумо иҷозати иҷрои ин фармонро надоред.")
         return
 
     if not context.args or len(context.args) < 2:
-        await update.message.reply_text("Истифода: /highlight <unique_id> <матни мисра>")
+        await update.message.reply_text(
+            f"""⚙️ <b>Истифодаи фармон</b>
+
+/highlight <unique_id> <матни мисра>
+
+Барои сатрҳои нав, аз '||' истифода баред.""",
+            parse_mode='HTML'
+        )
         return
 
     try:
         poem_unique_id = int(context.args[0])
         verse_text = ' '.join(context.args[1:])
-        verse_text = verse_text.replace('||', '\n')  # convert line markers to actual line breaks
+        verse_text = verse_text.replace('||', '\n')
 
         if db.is_highlight_exists(poem_unique_id, verse_text):
-            await update.message.reply_text("⚠️ Ин мисра аллакай дар <i>highlighted_verses</i> мавҷуд аст.", parse_mode='HTML')
+            await update.message.reply_text(
+                f"{EMOJI['error']} Ин мисра аллакай дар ҳайати мисраҳои интихобшуда мавҷуд аст.",
+                parse_mode='HTML'
+            )
             return
 
         db.add_highlighted_verse(poem_unique_id, verse_text)
-        await update.message.reply_text(f"✅ Мисра ба <i>highlighted_verses</i> илова шуд:\n\n<pre>{verse_text}</pre>", parse_mode='HTML')
+        await update.message.reply_text(
+            f"""{EMOJI['success']} <b>Мисра илова шуд</b>
+
+<pre>{verse_text}</pre>""",
+            parse_mode='HTML'
+        )
     except Exception as e:
         logger.error(f"Error adding highlighted verse: {e}")
-        await update.message.reply_text("❌ Хатогӣ дар иловаи мисра.")
+        await update.message.reply_text(
+            f"{EMOJI['error']} Хатогӣ дар иловаи мисра. Лутфан ID-и дурустро ворид кунед.",
+            parse_mode='HTML'
+        )
 
-
-async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMIN_USER_IDS:
-        await update.message.reply_text("⛔️ Шумо иҷозати иҷрои ин фармонро надоред.")
+        await update.message.reply_text(f"{EMOJI['error']} Шумо иҷозати иҷрои ин фармонро надоред.")
         return
 
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Истифода: /delete_highlight <highlight_id>")
+        await update.message.reply_text(
+            f"""⚙️ <b>Истифодаи фармон</b>
+
+/delete_highlight <highlight_id>""",
+            parse_mode='HTML'
+        )
         return
 
     try:
         highlight_id = int(context.args[0])
         db.delete_highlighted_verse(highlight_id)
-        await update.message.reply_text(f"✅ Мисраи бо ID {highlight_id} ҳазф шуд.")
+        await update.message.reply_text(f"{EMOJI['success']} Мисраи бо ID {highlight_id} ҳазф шуд.")
     except Exception as e:
         logger.error(f"Error deleting highlighted verse: {e}")
-        await update.message.reply_text("❌ Хатогӣ дар ҳазфи мисра.")
-
-
+        await update.message.reply_text(f"{EMOJI['error']} Хатогӣ дар ҳазфи мисра.")
 
 def main():
     # Check if required environment variables are set
@@ -877,7 +953,6 @@ def main():
     application.add_handler(CommandHandler("info", balkhi_info))
     application.add_handler(CommandHandler("highlight", highlight_verse))
     application.add_handler(CommandHandler("delete_highlight", delete_highlight))
-
 
     # Message handlers
     application.add_handler(MessageHandler(
@@ -897,4 +972,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
