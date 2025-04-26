@@ -1138,7 +1138,7 @@ async def post_daily_poem(context: ContextTypes.DEFAULT_TYPE):
             )
             # Send to Telegram channel
             await context.bot.send_message(
-                chat_id=os.getenv('1002389879472'),  # Replace with your channel ID
+                chat_id=os.getenv('TELEGRAM_CHANNEL_ID'),  # Replace with your channel ID
                 text=decorated_poem,
                 parse_mode='HTML'
             )
