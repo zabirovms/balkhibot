@@ -10,6 +10,8 @@ from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKe
 from itertools import zip_longest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from psycopg2.extras import DictCursor
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 # Logging Setup
 logging.basicConfig(
