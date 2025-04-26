@@ -441,8 +441,7 @@ async def send_poem(update_or_query, poem_id, volume_number=None, show_full=Fals
         if not poem:
             await send_message_safe(
                 update_or_query, 
-                "😔 Мутаассифона, шеър бо ин калима ёфт нашуд.
-Биёед дубора бо дигар тарз кӯшиш кунем! 🔎",
+                "😔 Мутаассифона, шеър бо ин калима ёфт нашуд. Биёед дубора бо дигар тарз кӯшиш кунем! 🔎",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("🏠 Ба саҳифаи аввал", callback_data="back_to_start")
                 ]])
