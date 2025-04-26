@@ -10,8 +10,6 @@ from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKe
 from itertools import zip_longest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from psycopg2.extras import DictCursor
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
 # Logging Setup
 logging.basicConfig(
@@ -36,6 +34,36 @@ class DatabaseManager:
     def _ensure_database_integrity(self):
         """Ensure all required database structure exists"""
         try:
+            # Create divan_poems table if not exists
+            if not self.execute_query("""
+                SELECT table_name FROM information_schema.tables 
+                WHERE table_name = 'divan_poems'
+                """, fetch=True):
+                
+                self.execute_query("""
+                CREATE TABLE divan_poems (
+                    id SERIAL PRIMARY KEY,
+                    poem_id INTEGER NOT NULL,
+                    section_title TEXT NOT NULL,
+                    poem_text TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(poem_id)
+                )
+                """)
+                logger.info("Created divan_poems table")
+                
+                # Add search capability
+                self.execute_query("""
+                ALTER TABLE divan_poems 
+                ADD COLUMN poem_tsv tsvector 
+                GENERATED ALWAYS AS (to_tsvector('simple', poem_text)) STORED
+                """)
+                
+                # Add index for text search
+                self.execute_query("""
+                CREATE INDEX idx_divan_poems_tsv ON divan_poems USING gin(poem_tsv)
+                """)
+                
             # 1. Add unique_id to poems if not exists
             if not self.execute_query("""
                 SELECT column_name FROM information_schema.columns 
@@ -129,6 +157,65 @@ class DatabaseManager:
             logger.error(f"Database Error: {e}")
             self.conn.rollback()
             raise
+
+    def get_divan_ghazals(self, page=1, per_page=10):
+        """Get paginated ghazals from Divan-e Shams"""
+        offset = (page - 1) * per_page
+        query = """
+        SELECT poem_id, section_title, poem_text 
+        FROM divan_poems 
+        ORDER BY poem_id
+        LIMIT %s OFFSET %s
+        """
+        ghazals = self.execute_query(query, (per_page, offset), fetch=True) or []
+        
+        # Get total count
+        count_query = """
+        SELECT COUNT(*) FROM divan_poems
+        """
+        count = self.execute_query(count_query, fetch=True)[0][0]
+        
+        return ghazals, count
+
+    def get_divan_ghazal_by_id(self, ghazal_id):
+        """Get a specific ghazal from Divan-e Shams"""
+        query = """
+        SELECT * FROM divan_poems 
+        WHERE poem_id = %s
+        """
+        result = self.execute_query(query, (ghazal_id,), fetch=True)
+        return result[0] if result else None
+
+    def add_divan_poem(self, section_title, poem_text):
+        """Add a new ghazal to Divan-e Shams"""
+        # Extract poem_id from section title (e.g., "Ғазали 24" -> 24)
+        import re
+        match = re.search(r'Ғазали\s*(\d+)', section_title)
+        if not match:
+            raise ValueError("Invalid section title format. Expected 'Ғазали X' where X is a number.")
+        
+        poem_id = int(match.group(1))
+        
+        # Check if poem already exists
+        check_query = """
+        SELECT EXISTS(
+            SELECT 1 FROM divan_poems 
+            WHERE poem_id = %s
+        )
+        """
+        result = self.execute_query(check_query, (poem_id,), fetch=True)
+        exists = result[0][0] if result else False
+        
+        if exists:
+            return False, "Ғазал бо ин рақам аллакай мавҷуд аст."
+        
+        # Insert new poem
+        insert_query = """
+        INSERT INTO divan_poems (poem_id, section_title, poem_text)
+        VALUES (%s, %s, %s)
+        """
+        self.execute_query(insert_query, (poem_id, section_title, poem_text))
+        return True, f"Ғазали {poem_id} бомуваффақият илова шуд."
 
     def get_all_daftars(self):
         daftars = [
@@ -234,6 +321,37 @@ class DatabaseManager:
         query = "INSERT INTO mixed_poems (poem_text) VALUES (%s)"
         self.execute_query(query, (poem_text,))
         return True
+
+    def add_divan_poem(self, section_title, poem_text):
+        # Extract poem_id from section title (e.g., "Ғазали 24" -> 24)
+        import re
+        match = re.search(r'Ғазали\s*(\d+)', section_title)
+        if not match:
+            raise ValueError("Invalid section title format. Expected 'Ғазали X' where X is a number.")
+        
+        poem_id = int(match.group(1))
+        
+        # Check if poem already exists
+        check_query = """
+        SELECT EXISTS(
+            SELECT 1 FROM poems 
+            WHERE book_title = 'Девони Шамс' 
+            AND poem_id = %s
+        )
+        """
+        result = self.execute_query(check_query, (poem_id,), fetch=True)
+        exists = result[0][0] if result else False
+        
+        if exists:
+            return False, "Ғазал бо ин рақам аллакай мавҷуд аст."
+        
+        # Insert new poem
+        insert_query = """
+        INSERT INTO poems (book_title, section_title, poem_id, poem_text)
+        VALUES ('Девони Шамс', %s, %s, %s)
+        """
+        self.execute_query(insert_query, (section_title, poem_id, poem_text))
+        return True, f"Ғазали {poem_id} бомуваффақият илова шуд."
 
 
 # Initialize database connection
@@ -622,15 +740,32 @@ async def send_poem(update_or_query, poem_id, volume_number=None, show_full=Fals
 
 async def divan_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        query = "SELECT DISTINCT volume_number FROM poems WHERE book_title = 'Девони Шамс' ORDER BY volume_number"
-        volumes = db.execute_query(query, fetch=True)
+        # Get first page of ghazals
+        ghazals, total_count = db.get_divan_ghazals(page=1)
+        per_page = 10
+        total_pages = (total_count + per_page - 1) // per_page
 
         buttons = []
-        for volume in volumes:
-            buttons.append([InlineKeyboardButton(
-                volume['volume_number'], 
-                callback_data=f"divan_volume_{volume['volume_number']}"
-            )])
+        # Create buttons in pairs
+        for i in range(0, len(ghazals), 2):
+            row = []
+            # Add first button
+            row.append(InlineKeyboardButton(
+                f"Ғазали {ghazals[i]['poem_id']}", 
+                callback_data=f"divan_poem_{ghazals[i]['poem_id']}"
+            ))
+            # Add second button if exists
+            if i + 1 < len(ghazals):
+                row.append(InlineKeyboardButton(
+                    f"Ғазали {ghazals[i+1]['poem_id']}", 
+                    callback_data=f"divan_poem_{ghazals[i+1]['poem_id']}"
+                ))
+            buttons.append(row)
+
+        # Add navigation buttons if needed
+        if total_pages > 1:
+            nav_buttons = [InlineKeyboardButton("Саҳифаи баъдӣ ➡️", callback_data="divan_page_2")]
+            buttons.append(nav_buttons)
 
         buttons.append([InlineKeyboardButton("🏠 Ба саҳифаи аввал", callback_data="back_to_start")])
 
@@ -839,14 +974,106 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "masnavi_info":
             await masnavi_info(update, context)
         elif data == "divan_info":
-            await divan_info(update, context)
+            try:
+                # Get first page of ghazals
+                ghazals, total_count = db.get_divan_ghazals(page=1)
+                per_page = 10
+                total_pages = (total_count + per_page - 1) // per_page
+
+                buttons = []
+                # Create buttons in pairs
+                for i in range(0, len(ghazals), 2):
+                    row = []
+                    # Add first button
+                    row.append(InlineKeyboardButton(
+                        f"Ғазали {ghazals[i]['poem_id']}", 
+                        callback_data=f"divan_poem_{ghazals[i]['poem_id']}"
+                    ))
+                    # Add second button if exists
+                    if i + 1 < len(ghazals):
+                        row.append(InlineKeyboardButton(
+                            f"Ғазали {ghazals[i+1]['poem_id']}", 
+                            callback_data=f"divan_poem_{ghazals[i+1]['poem_id']}"
+                        ))
+                    buttons.append(row)
+
+                # Add navigation buttons if needed
+                if total_pages > 1:
+                    nav_buttons = [InlineKeyboardButton("Саҳифаи баъдӣ ➡️", callback_data="divan_page_2")]
+                    buttons.append(nav_buttons)
+
+                buttons.append([InlineKeyboardButton("🏠 Ба саҳифаи аввал", callback_data="back_to_start")])
+
+                message_text = (
+                    "📖 <b>Девони Шамс</b>\n\n"
+                    f"Ҷамъи ғазалҳо: {total_count}\n"
+                    f"Саҳифа: 1 аз {total_pages}\n\n"
+                    "Лутфан ғазалро интихоб кунед:"
+                )
+
+                await query.edit_message_text(
+                    text=message_text,
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logger.error(f"Error in divan_info callback: {e}")
+                await query.answer("⚠️ Хатогӣ дар гирифтани рӯйхати ғазалҳо", show_alert=True)
         elif data == "search_menu":
             await search_menu(update, context)
 
 
-        elif data.startswith("divan_volume_"):
-            volume_number = data.split("_")[2]
-            # Add your logic to handle divan volumes here
+        elif data.startswith("divan_poem_"):
+            poem_id = int(data.split("_")[2])
+            poem = db.get_divan_ghazal_by_id(poem_id)
+            if poem:
+                intro = (
+                    "━━━━━ 📚 <b>Маълумот</b> 📚 ━━━━━\n\n"
+                    f"📖 <b>Китоб:</b> Девони Шамс\n"
+                    f"📑 <b>Бахш:</b> {poem['poem_id']}\n"
+                    f"🔹 <b>Мавзӯъ:</b> {poem['section_title']}\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                )
+                text_parts = split_long_message(poem['poem_text'], max_length=3000)
+                message_text = f"{intro}<pre>{text_parts[0]}</pre>"
+                
+                keyboard = [[InlineKeyboardButton("🏠 Ба саҳифаи аввал", callback_data="back_to_start")]]
+                
+                await query.edit_message_text(
+                    text=message_text,
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                await query.answer("⚠️ Ғазал ёфт нашуд", show_alert=True)
+
+        elif data.startswith("divan_page_"):
+            page = int(data.split("_")[2])
+            ghazals, total_count = db.get_divan_ghazals(page=page)
+            per_page = 10
+            total_pages = (total_count + per_page - 1) // per_page
+
+            buttons = []
+            for i in range(0, len(ghazals), 2):
+                row = []
+                row.append(InlineKeyboardButton(
+                    f"Ғазали {ghazals[i]['poem_id']}", 
+                    callback_data=f"divan_poem_{ghazals[i]['poem_id']}"
+                ))
+                if i + 1 < len(ghazals):
+                    row.append(InlineKeyboardButton(
+                        f"Ғазали {ghazals[i+1]['poem_id']}", 
+                        callback_data=f"divan_poem_{ghazals[i+1]['poem_id']}"
+                    ))
+                buttons.append(row)
+
+            nav_buttons = []
+            if page > 1:
+                nav_buttons.append(InlineKeyboardButton("⬅️ Қаблӣ", callback_data=f"divan_page_{page-1}"))
+            if page < total_pages:
+                nav_buttons.append(InlineKeyboardButton("Баъдӣ ➡️", callback_data=f"divan_page_{page+1}"))
+            if nav_buttons:
+                buttons.append(nav_buttons)
 
         elif data == "search_menu":
             search_text = (
@@ -1048,6 +1275,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📍 /highlight &lt;unique_id&gt; &lt;матни мисра&gt; — Илова кардани мисраи махсус\n"
         "🗑 /delete_highlight &lt;highlight_id&gt; — Ҳазфи мисраи махсус\n"
         "📍 /addpoem — Илова кардани мисраҳои омехта ба mixed_poems\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "ℹ️ <i>Эзоҳ:</i>\n"
         "- Барои ҷустуҷӯ фармони /search -ро нависед.\n"
         "- Мисраҳои рӯз ҳар рӯза нав мешаванд.\n"
@@ -1155,7 +1383,7 @@ def main():
         logger.error("❌ Required environment variables not set!")
         return
 
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # Command handlers
     application.add_handler(CommandHandler("start", start))
