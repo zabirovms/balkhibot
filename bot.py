@@ -1032,6 +1032,7 @@ def main():
     application.add_handler(CommandHandler("daily", daily_verse))
     application.add_handler(CommandHandler("verse", daily_verse))
     application.add_handler(CommandHandler("info", balkhi_info))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("highlight", highlight_verse))
     application.add_handler(CommandHandler("delete_highlight", delete_highlight))
 
