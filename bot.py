@@ -1136,7 +1136,7 @@ async def post_daily_poem(context: ContextTypes.DEFAULT_TYPE):
             )
             # Send to Telegram channel
             await context.bot.send_message(
-                chat_id=os.getenv('TELEGRAM_CHANNEL_ID'),  # Replace with your channel ID
+                chat_id=os.getenv('1002389879472'),  # Replace with your channel ID
                 text=decorated_poem,
                 parse_mode='HTML'
             )
@@ -1153,7 +1153,7 @@ def main():
         logger.error("❌ Required environment variables not set!")
         return
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Command handlers
     application.add_handler(CommandHandler("start", start))
