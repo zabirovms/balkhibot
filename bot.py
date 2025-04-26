@@ -1,10 +1,10 @@
 import os
 import logging
 import psycopg2
-import time
+import time as time_module
 import re
 import random
-from datetime import date
+from datetime import date, time
 from psycopg2 import sql
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from itertools import zip_longest
@@ -81,6 +81,21 @@ class DatabaseManager:
             CREATE INDEX IF NOT EXISTS idx_hv_poem_unique_id ON highlighted_verses(poem_unique_id)
             """)
 
+            # Create mixed_poems table if not exists
+            if not self.execute_query("""
+                SELECT table_name FROM information_schema.tables 
+                WHERE table_name = 'mixed_poems'
+                """, fetch=True):
+                
+                self.execute_query("""
+                CREATE TABLE mixed_poems (
+                    id SERIAL PRIMARY KEY,
+                    poem_text TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """)
+                logger.info("Created mixed_poems table")
+
         except Exception as e:
             logger.error(f"Error ensuring database integrity: {e}")
             raise
@@ -94,7 +109,7 @@ class DatabaseManager:
             except psycopg2.OperationalError as e:
                 logger.warning(f"Connection attempt {attempt + 1} failed: {e}")
                 if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay)
+                    time_module.sleep(self.retry_delay)
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
                 raise
@@ -199,6 +214,26 @@ class DatabaseManager:
             self.conn.close()
             logger.info("Database connection closed.")
 
+    def get_random_mixed_poem(self):
+        query = "SELECT * FROM mixed_poems ORDER BY RANDOM() LIMIT 1"
+        result = self.execute_query(query, fetch=True)
+        return result[0] if result else None
+
+    def add_mixed_poem(self, poem_text):
+        # First check if poem exists
+        check_query = "SELECT EXISTS(SELECT 1 FROM mixed_poems WHERE poem_text = %s)"
+        result = self.execute_query(check_query, (poem_text,), fetch=True)
+        exists = result[0][0] if result else False
+        
+        if exists:
+            return False
+            
+        # If poem doesn't exist, insert it
+        query = "INSERT INTO mixed_poems (poem_text) VALUES (%s)"
+        self.execute_query(query, (poem_text,))
+        return True
+
+
 # Initialize database connection
 db = DatabaseManager()
 
@@ -247,7 +282,29 @@ async def send_message_safe(update_or_query, text, **kwargs):
                 await send_message_safe(update_or_query, part, **kwargs)
 
 # ================== COMMAND HANDLERS ==================
+async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    channel_id = "@balkhiverses"  # Replace with your channel username
+    
+    try:
+        member = await context.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Error checking subscription: {e}")
+        return False
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_subscription(update, context):
+        keyboard = [[
+            InlineKeyboardButton("📢 Обуна шудан", url="https://t.me/balkhiverses"),
+            InlineKeyboardButton("🔄 Тафтиш", callback_data="check_subscription")
+        ]]
+        await update.message.reply_text(
+            "❗️ Барои истифодаи бот, лутфан ба канали мо обуна шавед:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
     keyboard = [
         [
             InlineKeyboardButton("📚 Маснавии Маънавӣ", callback_data="masnavi_info"),
@@ -367,12 +424,12 @@ async def show_poems_page(update: Update, context: ContextTypes.DEFAULT_TYPE, da
     current_chunk = page - 1
     buttons = []
     current_poems = poem_chunks[current_chunk]
-    
+
     # Split poems into two columns (5 each)
     mid_point = len(current_poems) // 2 + len(current_poems) % 2  # Handle odd number of poems
     left_column = current_poems[:mid_point]
     right_column = current_poems[mid_point:]
-    
+
     # Create rows with two buttons each
     for left, right in zip_longest(left_column, right_column):
         row = []
@@ -468,13 +525,13 @@ async def send_poem(update_or_query, poem_id, volume_number=None, show_full=Fals
         if show_full or total_parts == 1:
             current_part = text_parts[part]
             message_text = f"{intro}<pre>{current_part}</pre>"
-            
+
             if total_parts > 1:
                 message_text += f"\n\n📄 Қисми {part + 1} аз {total_parts}"
 
             keyboard = []
             nav_buttons = []
-            
+
             if total_parts > 1:
                 if part > 0:
                     nav_buttons.append(InlineKeyboardButton(
@@ -706,9 +763,34 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith("/"):
         return  # Let command handlers handle commands
 
-    # Treat all text as search term
+    # Check if we're waiting for a poem
+    if context.user_data.get('waiting_for_poem', False):
+        try:
+            success = db.add_mixed_poem(text)
+            if success:
+                await update.message.reply_text(
+                    f"✅ Шеър бомуваффақият илова шуд:\n\n<pre>{text}</pre>", 
+                    parse_mode='HTML'
+                )
+            else:
+                await update.message.reply_text("⛔ Ин шеър аллакай мавҷуд аст.")
+        except Exception as e:
+            logger.error(f"Error adding mixed poem: {e}")
+            await update.message.reply_text("❌ Хатогӣ дар иловаи шеър.")
+        finally:
+            context.user_data['waiting_for_poem'] = False
+        return
+
+    # If not waiting for poem, treat as search
     context.args = [text]  # Set the search term
     await search(update, context)
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('waiting_for_poem'):
+        context.user_data['waiting_for_poem'] = False
+        await update.message.reply_text("❌ Иловаи шеър бекор карда шуд.")
+    else:
+        await update.message.reply_text("❓ Ягон амали фаъол нест.")
 
 
 async def handle_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -735,6 +817,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     try:
+        if data == "check_subscription":
+            if await check_subscription(update, context):
+                await query.answer("✅ Ташаккур барои обуна!")
+                await start(update, context)
+                return
+            else:
+                await query.answer("❌ Шумо ҳоло обуна нашудаед!", show_alert=True)
+                return
+
+        # Check subscription for all other actions
+        if not await check_subscription(update, context):
+            await query.answer("❌ Лутфан аввал ба канал обуна шавед!", show_alert=True)
+            return
+
         # Show loading indicator
         await query.answer("⏳ Интизор шавед...")
 
@@ -756,7 +852,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Барои ҷустуҷӯ метавонед:\n"
                 "1. Фармони /search -ро навишта, пас аз он калимаи матлубро нависед\n"
                 "Масалан: /search ишқ\n\n"
-                "2. Ё ин ки аз тугмаҳои зер истифода баред:"
+                "2Ё ин ки аз тугмаҳои зер истифода баред:"
             )
             keyboard = [
                 [InlineKeyboardButton("🔍 Ҷустуҷӯ аз рӯи калима", callback_data="search_by_word")],
@@ -1017,6 +1113,39 @@ async def delete_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error deleting highlighted verse: {e}")
         await update.message.reply_text("❌ Хатогӣ дар ҳазфи мисра.")
 
+async def add_mixed_poem_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_USER_IDS:
+        await update.message.reply_text("⛔️ Шумо иҷозати илова кардани шеърро надоред.")
+        return
+
+    context.user_data['waiting_for_poem'] = True
+    await update.message.reply_text(
+        "Лутфан матни шеърро ворид кунед.\n\n"
+        "Барои бекор кардан /cancel -ро пахш кунед."
+    )
+
+async def post_daily_poem(context: ContextTypes.DEFAULT_TYPE):
+    try:
+        poem = db.get_random_mixed_poem()
+        if poem:
+            # Decorate the poem
+            decorated_poem = (
+                "📜 Шеъри Рӯз 📜\n\n"
+                f"<blockquote>{poem['poem_text']}</blockquote>"
+            )
+            # Send to Telegram channel
+            await context.bot.send_message(
+                chat_id=os.getenv('TELEGRAM_CHANNEL_ID'),  # Replace with your channel ID
+                text=decorated_poem,
+                parse_mode='HTML'
+            )
+            logger.info("Daily poem posted successfully.")
+        else:
+            logger.warning("No poems found in mixed_poems table.")
+    except Exception as e:
+        logger.error(f"Error posting daily poem: {e}")
+
 
 def main():
     # Check if required environment variables are set
@@ -1035,7 +1164,16 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("highlight", highlight_verse))
     application.add_handler(CommandHandler("delete_highlight", delete_highlight))
+    application.add_handler(CommandHandler("addpoem", add_mixed_poem_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
 
+    # Schedule daily poem posting (at 9:00 AM UTC)
+    job_queue = application.job_queue
+    job_queue.run_daily(
+        post_daily_poem,
+        time=time(9, 0),  # 9:00 AM UTC
+        days=(0, 1, 2, 3, 4, 5, 6)
+    )
 
     # Message handlers
     application.add_handler(MessageHandler(
