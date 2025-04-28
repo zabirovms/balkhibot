@@ -1392,9 +1392,14 @@ async def random_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in ADMIN_USER_IDS:
         try:
             channel_id = TELEGRAM_CHANNEL_ID
+            # Ensure channel ID is in the correct format
             if not channel_id.startswith('@') and not channel_id.startswith('-100'):
-                channel_id = f"@{channel_id.lstrip('@')}"
-                
+                if channel_id.startswith('balkhiverses'):
+                    channel_id = f"@{channel_id}"
+                else:
+                    channel_id = f"@{channel_id.lstrip('@')}"
+            
+            logger.info(f"Checking subscription for channel: {channel_id}")
             member = await context.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
             if member.status not in ['member', 'administrator', 'creator']:
                 keyboard = [[
