@@ -456,17 +456,6 @@ async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id not in ADMIN_USER_IDS and not await check_subscription(update, context):
-        keyboard = [[
-            InlineKeyboardButton("📢 Обуна шудан", url="https://t.me/balkhiverses"),
-            InlineKeyboardButton("🔄 Тафтиш", callback_data="check_subscription")
-        ]]
-        await update.message.reply_text(
-            "❗️ Барои истифодаи бот, лутфан ба канали мо обуна шавед:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return
-
     keyboard = [
         [
             InlineKeyboardButton("📚 Маснавии Маънавӣ", callback_data="masnavi_info"),
@@ -486,9 +475,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<b>Ин ҷо шумо метавонед:</b>\n\n"
         "📚 Маснавии Маънавиро мутолиа кунед\n"
         "📖 Девони Шамсро хонед\n"
-        "🎲 Шеърҳои тасодуфиро бубинед\n"
+        "🎲 Шеърҳои тасодуфиро бубинед (барои истифодаи ин хусусият лутфан ба канали мо обуна шавед)\n"
         "⭐️ Мисраҳои рӯзро бубинед\n"
-        "🔍 Ва ҷустуҷӯи осорро анҷом диҳед\n\n"
+        "🔍 Ва ҷустуҷӯи осорро анҷам диҳед\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "<i>Лутфан интихоб кунед:</i>"
     )
@@ -1397,6 +1386,39 @@ async def get_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def random_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /random command to show a random poem"""
+    user_id = update.effective_user.id
+    
+    # Check subscription only for random poems
+    if user_id not in ADMIN_USER_IDS:
+        try:
+            channel_id = TELEGRAM_CHANNEL_ID
+            if not channel_id.startswith('@') and not channel_id.startswith('-100'):
+                channel_id = f"@{channel_id.lstrip('@')}"
+                
+            member = await context.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+            if member.status not in ['member', 'administrator', 'creator']:
+                keyboard = [[
+                    InlineKeyboardButton("📢 Обуна шудан", url="https://t.me/balkhiverses"),
+                    InlineKeyboardButton("🔄 Тафтиш", callback_data="check_subscription")
+                ]]
+                message_text = "❗️ Барои истифодаи шеърҳои тасодуфӣ, лутфан ба канали мо обуна шавед:"
+                
+                if update.callback_query:
+                    await update.callback_query.edit_message_text(
+                        text=message_text,
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                else:
+                    await update.message.reply_text(
+                        text=message_text,
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                return
+        except Exception as e:
+            logger.error(f"Error checking subscription: {e}")
+            # In case of error, allow access to prevent blocking legitimate users
+            pass
+
     try:
         # Get a random poem that hasn't been shown today
         today = date.today().strftime("%Y-%m-%d")
