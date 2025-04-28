@@ -1038,7 +1038,40 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.answer("⏳ Интизор шавед...")
 
-        if data == "masnavi_info":
+        if data == "check_subscription":
+            user_id = query.from_user.id
+            if user_id in ADMIN_USER_IDS:
+                await random_command(update, context)
+                return
+                
+            try:
+                channel_id = TELEGRAM_CHANNEL_ID
+                # Ensure channel ID is in the correct format
+                if not channel_id.startswith('@') and not channel_id.startswith('-100'):
+                    if channel_id.startswith('balkhiverses'):
+                        channel_id = f"@{channel_id}"
+                    else:
+                        channel_id = f"@{channel_id.lstrip('@')}"
+                
+                logger.info(f"Checking subscription for channel: {channel_id}")
+                member = await context.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+                if member.status in ['member', 'administrator', 'creator']:
+                    await random_command(update, context)
+                else:
+                    keyboard = [[
+                        InlineKeyboardButton("📢 Обуна шудан", url="https://t.me/balkhiverses"),
+                        InlineKeyboardButton("🔄 Тафтиш", callback_data="check_subscription")
+                    ]]
+                    await query.edit_message_text(
+                        text="❗️ Барои истифодаи шеърҳои тасодуфӣ, лутфан ба канали мо обуна шавед:",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+            except Exception as e:
+                logger.error(f"Error checking subscription: {e}")
+                await query.answer("⚠️ Хатогӣ дар тафтиши обуна. Лутфан аз нав кӯшиш кунед.", show_alert=True)
+            return
+
+        elif data == "masnavi_info":
             await masnavi_info(update, context)
         elif data == "divan_info":
             await divan_info(update, context)
